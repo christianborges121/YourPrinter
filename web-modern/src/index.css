@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --app-bg: #121212;
+  --app-surface: #1E1E1E;
+  --app-surface-secondary: #262626;
+  --app-border: #2E2E2E;
+  --app-border-subtle: #383838;
+  --app-accent-green: #00AE42;
+  --app-accent-green-dark: #009638;
+  --app-text-primary: #F3F4F6;
+  --app-text-secondary: #D1D5DB;
+  --app-text-muted: #94A3B8;
+  --app-warning: #F59E0B;
+  --app-error: #EF4444;
+  --app-info: #3B82F6;
+  --app-toolhead-t0: #3B82F6;
+  --app-toolhead-t1: #10B981;
+  --app-bed-heat: #F97316;
+  --app-chamber: #8B5CF6;
+  --app-card-radius: 12px;
+}
+
+body {
+  margin: 0;
+  background-color: var(--app-bg);
+  color: var(--app-text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--app-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--app-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--app-border-subtle);
+}
+
+/* Animations */
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}

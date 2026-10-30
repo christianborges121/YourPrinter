@@ -1,0 +1,16 @@
+{
+  "name": "yourprinter-monorepo",
+  "version": "1.0.5",
+  "private": true,
+  "description": "YourPrinter Unified Monorepo (Desktop, Headless Server, WebUI, Mobile, Shared)",
+  "license": "MIT",
+  "author": "GhostTypes, rolohaun, christianborges121",
+  "scripts": {
+    "build:webui": "pnpm --dir desktop run build:webui",
+    "build:desktop": "pnpm --dir desktop run build",
+    "start:desktop": "pnpm --dir desktop run start",
+    "test:desktop": "pnpm --dir desktop run test",
+    "test:mobile": "cd mobile && flutter test",
+    "analyze:mobile": "cd mobile && flutter analyze"
+  }
+}

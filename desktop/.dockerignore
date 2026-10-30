@@ -1,0 +1,7 @@
+node_modules
+/dist
+out
+.git
+*.log
+!vendor/slicer-meta/dist
+!vendor/slicer-meta/dist/**

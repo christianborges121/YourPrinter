@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+  <defs>
+    <radialGradient id="badgeGlow" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#00ae42" stop-opacity="0.25" />
+      <stop offset="100%" stop-color="#00ae42" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <!-- Rounded Squircle Tile -->
+  <rect x="6" y="6" width="108" height="108" rx="26" fill="#0b0f19" stroke="#1e293b" stroke-width="2" />
+  <rect x="6" y="6" width="108" height="108" rx="26" fill="url(#badgeGlow)" />
+  <!-- Unified Stem Logo in Solid Brand Green -->
+  <g stroke="#00ae42" stroke-width="10.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 54 25 L 54 95" />
+    <path d="M 29 25 L 54 55" />
+    <path d="M 54 25 L 77 25 C 96 25 96 55 77 55 L 54 55" />
+  </g>
+</svg>

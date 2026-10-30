@@ -1,0 +1,221 @@
+name: Build & Publish Android APK
+
+on:
+  push:
+    branches:
+      - master
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      custom_version:
+        description: 'Custom version override (e.g. 1.2.0 or 1.2.0+5). Leave blank for default 0.0.1 bump.'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build & Publish Single APK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine & Bump Version (0.0.1 increment on push)
+        id: versioning
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          echo "Commit message: $COMMIT_MSG"
+
+          python3 - << 'EOF'
+          import os, re, subprocess
+
+          pubspec_path = "pubspec.yaml"
+          with open(pubspec_path, "r", encoding="utf-8") as f:
+              pubspec_content = f.read()
+
+          m = re.search(r'^version:\s*(\d+)\.(\d+)\.(\d+)(?:\+(\d+))?', pubspec_content, re.M)
+          if not m:
+              raise ValueError("Could not parse version from pubspec.yaml")
+
+          major, minor, patch, build = m.groups()
+          major = int(major)
+          minor = int(minor)
+          patch = int(patch)
+          build = int(build) if build else 1
+
+          custom_input = os.environ.get("INPUT_CUSTOM_VERSION", "").strip()
+          commit_msg = os.environ.get("COMMIT_MSG", "")
+
+          # Check for explicit version override in commit message: [version: 1.2.0] or [set-version: 1.2.0]
+          commit_override = re.search(r'\[(?:version|set-version):\s*v?(\d+\.\d+\.\d+(?:\+\d+)?)\]', commit_msg, re.IGNORECASE)
+          skip_bump = bool(re.search(r'\[(?:skip bump|no bump)\]', commit_msg, re.IGNORECASE))
+          is_tag_push = os.environ.get("GITHUB_REF", "").startswith("refs/tags/v")
+
+          if custom_input:
+              # Input provided via workflow_dispatch
+              ov = re.match(r'^v?(\d+)\.(\d+)\.(\d+)(?:\+(\d+))?$', custom_input)
+              if ov:
+                  new_major, new_minor, new_patch, new_build = ov.groups()
+                  major = int(new_major)
+                  minor = int(new_minor)
+                  patch = int(new_patch)
+                  build = int(new_build) if new_build else (build + 1)
+              else:
+                  raise ValueError(f"Invalid custom version format: {custom_input}")
+          elif commit_override:
+              ov = re.match(r'^(\d+)\.(\d+)\.(\d+)(?:\+(\d+))?$', commit_override.group(1))
+              if ov:
+                  new_major, new_minor, new_patch, new_build = ov.groups()
+                  major = int(new_major)
+                  minor = int(new_minor)
+                  patch = int(new_patch)
+                  build = int(new_build) if new_build else (build + 1)
+          elif is_tag_push or skip_bump:
+              print("Tag push or [skip bump] detected; maintaining current version without 0.0.1 increment.")
+          else:
+              # Default: 0.0.1 patch increment & build number increment
+              patch += 1
+              build += 1
+
+          version_tag = f"{major}.{minor}.{patch}"
+          full_version = f"{version_tag}+{build}"
+
+          # Update pubspec.yaml
+          updated_pubspec = re.sub(
+              r'^version:\s*.*$',
+              f"version: {full_version}",
+              pubspec_content,
+              flags=re.M
+          )
+          with open(pubspec_path, "w", encoding="utf-8") as f:
+              f.write(updated_pubspec)
+
+          # Update version text in settings screen if present
+          settings_path = "lib/ui/settings/settings_screen.dart"
+          if os.path.exists(settings_path):
+              with open(settings_path, "r", encoding="utf-8") as f:
+                  settings_content = f.read()
+              updated_settings = re.sub(
+                  r"Text\('YourPrinter Mobile v[0-9.]+',",
+                  f"Text('YourPrinter Mobile v{version_tag}',",
+                  settings_content
+              )
+              with open(settings_path, "w", encoding="utf-8") as f:
+                  f.write(updated_settings)
+
+          apk_name = f"YourPrinter-v{version_tag}.apk"
+          print(f"Target App Version: {version_tag} (Full: {full_version})")
+          print(f"Target APK Name: {apk_name}")
+
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
+              f.write(f"APP_VERSION={version_tag}\n")
+              f.write(f"APP_FULL_VERSION={full_version}\n")
+              f.write(f"APK_NAME={apk_name}\n")
+          EOF
+        env:
+          INPUT_CUSTOM_VERSION: ${{ github.event.inputs.custom_version }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+
+      - name: Commit & Push Version Increment to Master
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet pubspec.yaml lib/ui/settings/settings_screen.dart; then
+            git add pubspec.yaml lib/ui/settings/settings_screen.dart
+            git commit -m "chore(release): bump version to ${{ env.APP_VERSION }} [skip ci]"
+            git push origin master
+          else
+            echo "No version change to commit."
+          fi
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Get Dependencies
+        run: flutter pub get
+
+      - name: Run Static Analysis
+        run: flutter analyze
+
+      - name: Run Unit & Widget Tests
+        run: flutter test
+
+      - name: Configure Keystore for Release Signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > android/yourprinter-release.jks
+            printf "storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=yourprinter-release.jks\n" \
+              "$KEYSTORE_PASSWORD" "$KEY_PASSWORD" "$KEY_ALIAS" > android/key.properties
+            echo "Release keystore configured successfully."
+          else
+            echo "Warning: ANDROID_KEYSTORE_BASE64 secret not found; falling back to debug key."
+          fi
+
+      - name: Build Single Universal Release APK
+        run: flutter build apk --release
+
+      - name: Stage Versioned APK
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk ${{ env.APK_NAME }}
+          ls -lh ${{ env.APK_NAME }}
+
+      - name: Upload APK to Actions Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APK_NAME }}
+          path: mobile/${{ env.APK_NAME }}
+          retention-days: 30
+
+      - name: Publish Direct Unzipped APK to GitHub Release
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('v{0}', env.APP_VERSION) }}
+          name: ${{ startsWith(github.ref, 'refs/tags/v') && format('YourPrinter Mobile {0}', github.ref_name) || format('YourPrinter Mobile v{0}', env.APP_VERSION) }}
+          prerelease: false
+          make_latest: true
+          files: mobile/${{ env.APK_NAME }}
+          body: |
+            ### 🚀 YourPrinter Mobile v${{ env.APP_VERSION }}
+
+            Single universal Android APK (no unzipping required):
+            - **Download APK:** [`${{ env.APK_NAME }}`](https://github.com/${{ github.repository }}/releases/download/${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('v{0}', env.APP_VERSION) }}/${{ env.APK_NAME }})
+
+            - **Compatibility:** Universal binary (arm64, armeabi-v7a, x86_64) compatible with all modern and legacy Android devices.
+            - **Commit:** `${{ github.sha }}`
+            - **Branch/Tag:** `${{ github.ref_name }}`
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

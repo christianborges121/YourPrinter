@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+  <!-- Unified Stem Logo for YourPrinter (Signature Brand Green #00ae42) -->
+  <g stroke="#00ae42" stroke-width="11" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 54 24 L 54 96" />
+    <path d="M 28 24 L 54 54" />
+    <path d="M 54 24 L 78 24 C 98 24 98 54 78 54 L 54 54" />
+  </g>
+</svg>

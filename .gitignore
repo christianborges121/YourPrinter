@@ -1,0 +1,75 @@
+# Dependencies
+**/node_modules/
+
+# Build outputs
+desktop/dist/
+desktop/dist-electron/
+desktop/out/
+!desktop/vendor/slicer-meta/dist/
+mobile/build/
+mobile/.dart_tool/
+mobile/.flutter-plugins-dependencies
+mobile/.pub-cache/
+mobile/.pub/
+mobile/coverage/
+mobile/android/app/debug
+mobile/android/app/profile
+mobile/android/app/release
+*.apk
+*.aab
+**/.kotlin/
+
+# TypeScript compiled output & caches
+*.js.map
+*.d.ts.map
+*.tsbuildinfo
+**/.cache/
+desktop/resources/bin/
+
+# Logs & runtime
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+pids
+*.pid
+*.seed
+*.pid.lock
+coverage/
+*.lcov
+test-results/
+
+# Environment, local compose overrides & secrets
+.env
+.env.*
+!.env.example
+.npmrc
+docker-compose.override.yml
+docker-compose.local.yml
+**/key.properties
+**/*.keystore
+**/*.jks
+**/config.json
+**/printers.json
+
+# Editors & OS
+.vscode/
+.idea/
+*.iml
+*.ipr
+*.iws
+*.swp
+*.swo
+*~
+.DS_Store
+ehthumbs.db
+Thumbs.db
+
+# Temporary / Scratch
+tmp/
+temp/
+scratch/
+__pycache__/
+*.pyc
