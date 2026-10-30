@@ -76,11 +76,9 @@ export class AD5XBackend extends DualAPIBackend {
         usesLegacyAPI: !isCreator5,
       },
       filtration: {
-        available: isCreator5, // Creator 5 Pro has internal circulation filter and external exhaust vent
-        controllable: isCreator5,
-        reason: isCreator5
-          ? 'Hardware supports filtration and vent control'
-          : 'Hardware does not support filtration control',
+        available: false, // Auto-detected from /product endpoint in DualAPIBackend
+        controllable: false,
+        reason: 'Filtration status detected from hardware product endpoint',
       },
       gcodeCommands: {
         available: true,

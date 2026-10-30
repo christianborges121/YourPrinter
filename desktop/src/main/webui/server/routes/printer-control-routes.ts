@@ -71,6 +71,55 @@ export function registerPrinterControlRoutes(router: Router, deps: RouteDependen
     await handleLedControl(req, res, deps, false);
   });
 
+  router.post('/printer/control/fan', async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const contextResult = resolveContext(req, deps, {
+        requireBackendReady: true,
+        requireBackendInstance: true,
+      });
+      if (!contextResult.success) {
+        return sendErrorResponse<StandardAPIResponse>(res, contextResult.statusCode, contextResult.error);
+      }
+
+      const { contextId, backend } = contextResult;
+      if (!backend) {
+        return sendErrorResponse<StandardAPIResponse>(res, 503, 'Backend not available');
+      }
+
+      const body = (req.body || {}) as { coolingFan?: number; chamberFan?: number; percent?: number };
+      const coolingFan = body.coolingFan !== undefined ? body.coolingFan : body.percent;
+      const chamberFan = body.chamberFan;
+
+      if (coolingFan === undefined && chamberFan === undefined) {
+        return sendErrorResponse<StandardAPIResponse>(res, 400, 'Must provide coolingFan or chamberFan speed');
+      }
+
+      let success = false;
+      if (typeof (backend as any).sendHttpFanCommand === 'function') {
+        success = await (backend as any).sendHttpFanCommand({ coolingFan, chamberFan });
+      } else {
+        // Fallback to G-code M106/M107 for traditional backends
+        if (coolingFan !== undefined) {
+          const clamped = Math.max(0, Math.min(100, Math.round(coolingFan)));
+          const gcode = clamped === 0 ? 'M107' : `M106 S${Math.round((clamped / 100) * 255)}`;
+          const gcodeRes = await deps.backendManager.executeGCodeCommand(contextId, gcode);
+          success = gcodeRes.success;
+        } else {
+          success = true;
+        }
+      }
+
+      const response: StandardAPIResponse = {
+        success,
+        message: success ? 'Fan speed updated' : 'Failed to update fan speed',
+      };
+      return res.status(success ? 200 : 500).json(response);
+    } catch (error) {
+      const appError = toAppError(error);
+      return sendErrorResponse<StandardAPIResponse>(res, 500, appError.message);
+    }
+  });
+
   router.post('/printer/control/clear-status', async (req: AuthenticatedRequest, res: Response) => {
     try {
       const contextResult = resolveContext(req, deps, {

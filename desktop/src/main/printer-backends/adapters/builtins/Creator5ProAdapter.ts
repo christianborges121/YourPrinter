@@ -21,7 +21,7 @@ export class Creator5ProAdapter extends FlashForgeAdapter {
     nozzleCount: 4,
     hasPartCoolingFan: true,
     hasChamberFan: true,
-    hasFiltration: true, // Creator 5 Pro has internal circulation filter and external exhaust vent
+    hasFiltration: false, // Default to false; dynamically enabled if /product reports internalFanCtrlState or externalFanCtrlState != 0
     hasLedControl: true, // Native HTTP lightControl_cmd
     hasCamera: true,
     hasMaterialStation: true, // 4-head physical tool changer

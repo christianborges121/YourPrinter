@@ -225,6 +225,21 @@ class ApiClient {
     return this.request(endpoint, { method: 'POST', body: JSON.stringify({ contextId }) });
   }
 
+  // Fan Control
+  async setFanSpeed(percent: number, contextId?: string): Promise<{ success: boolean }> {
+    return this.request('/api/printer/control/fan', {
+      method: 'POST',
+      body: JSON.stringify({ coolingFan: percent, contextId }),
+    });
+  }
+
+  async setChamberFanSpeed(percent: number, contextId?: string): Promise<{ success: boolean }> {
+    return this.request('/api/printer/control/fan', {
+      method: 'POST',
+      body: JSON.stringify({ chamberFan: percent, contextId }),
+    });
+  }
+
   // Files & Jobs
   async getRecentJobs(contextId?: string): Promise<{ success: boolean; files: WebUIJobFile[] }> {
     return this.request('/api/jobs/recent', {}, { contextId });

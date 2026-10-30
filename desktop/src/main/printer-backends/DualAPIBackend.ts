@@ -201,11 +201,10 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
         /creator\s*(5|pro|4)/i.test((this.printerDetails as any)?.Name || '') ||
         this.modelType === 'creator-5-pro';
 
-      // Creator 5 Pro firmware under-reports fan states in /product, so enable by model
+      // Check product info for circulation and filtration fan capabilities
       const hasFiltration =
-        isCreator5
-          ? true
-          : (this.productInfo.internalFanCtrlState !== 0 || this.productInfo.externalFanCtrlState !== 0);
+        (this.productInfo.internalFanCtrlState !== undefined && this.productInfo.internalFanCtrlState !== 0) ||
+        (this.productInfo.externalFanCtrlState !== undefined && this.productInfo.externalFanCtrlState !== 0);
 
       // For AD5X (except Creator 5), respect the child's LED settings (don't auto-detect)
       const ledBuiltin =
@@ -310,6 +309,34 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
           const nozzleTemp = parseInt(tempStr, 10);
           const toolIndex = toolIndexStr !== undefined ? parseInt(toolIndexStr, 10) : undefined;
           const ok = await this.sendHttpTemperatureCommand({ nozzle: nozzleTemp, toolIndex });
+          return {
+            success: ok,
+            command,
+            response: ok ? 'ok' : 'error',
+            executionTime: Date.now() - startTime,
+            timestamp: new Date(),
+          };
+        }
+
+        // Handle M106 (fan on/speed) and M107 (fan off) via HTTP printerCtl_cmd
+        const fanOnMatch = command.match(/M106(?:\s+S(\d+))?/i);
+        const fanOffMatch = command.match(/M107/i);
+
+        if (fanOnMatch) {
+          const pwm = fanOnMatch[1] !== undefined ? parseInt(fanOnMatch[1], 10) : 255;
+          const percent = Math.min(100, Math.max(0, Math.round((pwm / 255) * 100)));
+          const ok = await this.sendHttpFanCommand({ coolingFan: percent });
+          return {
+            success: ok,
+            command,
+            response: ok ? 'ok' : 'error',
+            executionTime: Date.now() - startTime,
+            timestamp: new Date(),
+          };
+        }
+
+        if (fanOffMatch) {
+          const ok = await this.sendHttpFanCommand({ coolingFan: 0 });
           return {
             success: ok,
             command,
@@ -1392,6 +1419,67 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
       return data?.code === 0;
     } catch (error) {
       console.warn('[DualAPIBackend] Failed to send HTTP temperature command:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send HTTP fan command for HTTP-only printers (Creator 5 / 5 Pro)
+   * Sends printerCtl_cmd with coolingFan, coolingLeftFan, chamberFan, speed, zAxisCompensation
+   */
+  public async sendHttpFanCommand(fans: { coolingFan?: number; chamberFan?: number }): Promise<boolean> {
+    try {
+      const details = this.printerDetails as Record<string, any> | undefined;
+      const serialNumber =
+        this.serialNumber ||
+        details?.SerialNumber ||
+        details?.serialNumber ||
+        (this.fiveMClient as unknown as { serialNumber?: string })?.serialNumber ||
+        '';
+      const checkCode =
+        this.checkCode ||
+        details?.CheckCode ||
+        details?.checkCode ||
+        (this.fiveMClient as unknown as { checkCode?: string })?.checkCode ||
+        '';
+      const ip =
+        this.ipAddress ||
+        details?.IPAddress ||
+        details?.ipAddress ||
+        '';
+
+      if (!ip) return false;
+
+      const currentDetail = (this.lastTelemetryData?.rawStatus as Record<string, any>) || {};
+      const coolingFan = fans.coolingFan !== undefined ? fans.coolingFan : (currentDetail.coolingFanSpeed ?? 0);
+      const chamberFan = fans.chamberFan !== undefined ? fans.chamberFan : (currentDetail.chamberFanSpeed ?? 0);
+      const speed = currentDetail.currentPrintSpeed ?? 100;
+      const zAxisCompensation = currentDetail.zAxisCompensation ?? 0;
+
+      const res = await fetch(`http://${ip}:8898/control`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          serialNumber,
+          checkCode,
+          payload: {
+            cmd: 'printerCtl_cmd',
+            args: {
+              coolingFan,
+              coolingLeftFan: 0,
+              chamberFan,
+              speed,
+              zAxisCompensation,
+            },
+          },
+        }),
+        signal: AbortSignal.timeout(4000),
+      });
+
+      const data = (await res.json()) as { code?: number };
+      return data?.code === 0;
+    } catch (err) {
+      console.warn('[DualAPIBackend] Failed to send HTTP fan command:', err);
       return false;
     }
   }

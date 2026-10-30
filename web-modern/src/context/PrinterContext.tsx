@@ -46,7 +46,7 @@ interface PrinterContextType {
   setExtruderTemp: (temp: number, toolIndex?: number) => Promise<boolean>;
   setChamberTemp: (temp: number) => Promise<boolean>;
   setFiltration: (mode: 'off' | 'internal' | 'external') => Promise<boolean>;
-  setCoolingFanSpeed: (percent: number) => boolean;
+  setCoolingFanSpeed: (percent: number) => boolean | Promise<boolean>;
   loadSlot: (slotId: number) => Promise<boolean>;
   unloadMaterial: () => Promise<boolean>;
   updateWatchdog: (config: { threshold?: number; auto_pause_enabled?: boolean; check_interval_sec?: number }) => Promise<boolean>;
@@ -424,14 +424,28 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
     [activeContextId, refreshStatus]
   );
 
-  const setCoolingFanSpeed = useCallback((percent: number) => {
-    const clamped = Math.max(0, Math.min(100, Math.round(percent)));
-    if (clamped === 0) {
-      return wsClient.executeGcode('M107');
-    }
-    const pwm = Math.round((clamped / 100) * 255);
-    return wsClient.executeGcode(`M106 S${pwm}`);
-  }, []);
+  const setCoolingFanSpeed = useCallback(
+    async (percent: number) => {
+      const clamped = Math.max(0, Math.min(100, Math.round(percent)));
+      // Optimistically update telemetry fanSpeed
+      setStatus((prev) => (prev ? { ...prev, coolingFanSpeed: clamped, fanSpeed: clamped } : prev));
+      try {
+        const res = await api.setFanSpeed(clamped, activeContextId || undefined);
+        if (res.success) {
+          await refreshStatus();
+          return true;
+        }
+      } catch {
+        // Fall back to WebSocket G-code for printers with legacy TCP
+      }
+      if (clamped === 0) {
+        return wsClient.executeGcode('M107');
+      }
+      const pwm = Math.round((clamped / 100) * 255);
+      return wsClient.executeGcode(`M106 S${pwm}`);
+    },
+    [activeContextId, refreshStatus]
+  );
 
   const loadSlot = useCallback(
     async (slotId: number) => {

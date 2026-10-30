@@ -155,6 +155,13 @@ export const ControlPanelCard: React.FC = () => {
               );
             })}
           </div>
+
+          {/* Idle notice for printers with firmware active-print fan interlocks */}
+          {fanSpeed > 0 && (status?.printerState === 'ready' || status?.printerState === 'idle') && (
+            <p className="text-[10px] text-[#94A3B8] italic mt-0.5">
+              Note: Toolhead fans engage when a print job starts.
+            </p>
+          )}
         </div>
       )}
 
