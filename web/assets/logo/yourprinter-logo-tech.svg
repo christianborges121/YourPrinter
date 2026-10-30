@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
-  <!-- Heated build-plate bottom connecting bar -->
-  <rect x="22" y="88" width="76" height="8" rx="4" fill="#00ae42" />
-  <!-- Y on left rooted in bottom bar -->
-  <path d="M 26 24 L 46 50 L 46 88" stroke="#00ae42" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" />
-  <path d="M 64 24 L 46 50" stroke="#00ae42" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" />
-  <!-- P on right rooted in bottom bar with 45° chamfers -->
-  <path d="M 74 88 L 74 24 L 90 24 L 102 36 L 102 44 L 90 56 L 74 56" stroke="#ffffff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" />
-</svg>

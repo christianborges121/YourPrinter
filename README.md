@@ -30,7 +30,7 @@ All original license terms and copyright notices are strictly retained in [`LICE
 ```text
 YourPrinter/
 ├── desktop/    # Electron desktop app, headless Express/WebSocket server, printer backends & vendor packages
-├── web/        # Browser WebUI client (TypeScript, GridStack, Bambu-style dark theme, AMS/Multi-Head manager)
+├── web/        # Modern browser WebUI client (React 19, TypeScript, Vite, Tailwind CSS, Lucide Icons, Mobile Parity UI)
 ├── mobile/     # Native Flutter mobile app (Android/iOS) with live camera, fleet management & filament slot UI
 ├── shared/     # Shared API contracts (web-api.types.ts), printer/polling models, and official brand logos
 ├── CHANGELOG.md

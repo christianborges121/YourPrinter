@@ -4,7 +4,7 @@ Guidelines and rules for AI agents working in this unified repository (`desktop/
 
 ## Repository Structure (Option 1)
 - `desktop/`: Electron desktop application, headless server (`WebUIManager`), printer backends (FlashForge 5M/AD5X/Creator 5, Bambu Lab A1 mini), Express REST & WebSocket API, and vendor packages (`@parallel-7/slicer-meta`).
-- `web/`: WebUI browser frontend (`app.ts`, `features/`, `grid/`, `ui/`, `webui.css`, `index.html`) compiled into `desktop/out/webui/static`.
+- `web/`: Modern WebUI browser frontend (React 19, TypeScript, Vite, Tailwind CSS, Lucide Icons) compiled into `desktop/out/webui/static`.
 - `mobile/`: Flutter Android/iOS application (`YourPrinter Mobile`).
 - `shared/`: Shared TypeScript API contracts (`types/web-api.types.ts`), printer/camera/spoolman types, utilities, and brand logo assets (`assets/logo/`).
 

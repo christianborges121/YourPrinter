@@ -12,7 +12,7 @@
     "dev:clean": "npm run clean && npm run dev",
     "build": "npm run build:webui && electron-vite build",
     "build:clean": "npm run clean && npm run build",
-    "build:webui": "rimraf out/webui/static && node -e \"const fs = require('fs'); const { execSync } = require('child_process'); const cfg = fs.existsSync('../web/tsconfig.json') ? '../web/tsconfig.json' : 'src/main/webui/static/tsconfig.json'; execSync('npx tsc --project ' + cfg, { stdio: 'inherit' });\" && npm run build:webui:copy",
+    "build:webui": "rimraf out/webui/static && node -e \"const { execSync } = require('child_process'); const fs = require('fs'); execSync('npm --prefix ../web run build', { stdio: 'inherit' }); fs.cpSync('../web/dist', 'out/webui/static', { recursive: true });\"",
     "build:webui:copy": "node scripts/copy-webui-assets.cjs",
     "build:linux": "tsx scripts/platform-build-wrapper.ts --platform linux",
     "build:linux:raw": "npm run build:clean && electron-builder --linux --publish never --config electron-builder-config.cjs",

@@ -1,6 +1,6 @@
-# YourPrinter Web Modern (Mobile Parity UI)
+# YourPrinter Web (Browser UI)
 
-A modern, high-performance web frontend rewrite of **YourPrinter** matching the design system, animations, telemetry, and capabilities of the Flutter Mobile App (`mobile/`).
+A modern, high-performance web frontend for **YourPrinter** matching the design system, animations, telemetry, and capabilities of the Flutter Mobile App (`mobile/`).
 
 Built with **React 19 + TypeScript + Vite + Tailwind CSS + Lucide Icons**.
 
@@ -93,14 +93,14 @@ Configured in `src/index.css` and `tailwind.config.js` to match `mobile/lib/core
 
 ### Running Dev Server
 ```bash
-cd web-modern
+cd web
 npm run dev
 ```
 Starts the Vite dev server at `http://localhost:5173/`. By default, it proxies/connects to `http://localhost:3080` (or whichever URL is configured in the Settings screen or `localStorage`).
 
 ### Building for Production
 ```bash
-cd web-modern
+cd web
 npm run build
 ```
 Compiles TypeScript and creates optimized production assets in `dist/`.

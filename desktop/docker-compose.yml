@@ -7,7 +7,7 @@ services:
     restart: unless-stopped
     shm_size: '512m'
     ports:
-      # Backend port 3000 is proxied internally by yourprinter-modern (Nginx) on port 3080
+      # Backend port 3000 is proxied internally by yourprinter-web (Nginx) on port 3080
       - "1984:1984"
       - "8555:8555/tcp"
     environment:
@@ -17,11 +17,11 @@ services:
     volumes:
       - /media/Safe-Storage/AppData/yourprinter/config:/root/.config/YourPrinter
 
-  yourprinter-modern:
+  yourprinter-web:
     build:
-      context: ../web-modern
+      context: ../web
       dockerfile: Dockerfile
-    container_name: yourprinter-modern
+    container_name: yourprinter-web
     restart: unless-stopped
     ports:
       - "3080:80"

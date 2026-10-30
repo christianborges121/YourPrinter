@@ -6,6 +6,8 @@
   "license": "MIT",
   "author": "GhostTypes, rolohaun, christianborges121",
   "scripts": {
+    "build:web": "npm --prefix web run build",
+    "dev:web": "npm --prefix web run dev",
     "build:webui": "pnpm --dir desktop run build:webui",
     "build:desktop": "pnpm --dir desktop run build",
     "start:desktop": "pnpm --dir desktop run start",

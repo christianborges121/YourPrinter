@@ -1,5 +1,5 @@
 /**
- * Unified TypeScript definitions for YourPrinter Web-Modern.
+ * Unified TypeScript definitions for YourPrinter Web.
  * Aligns with shared/types/web-api.types.ts and mobile Dart models.
  */
 
