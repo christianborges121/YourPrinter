@@ -15,8 +15,8 @@ const DEFAULT_DEV_SERVER = 'http://localhost:3080';
 export function getServerUrl(): string {
   const stored = localStorage.getItem(STORAGE_KEYS.SERVER_URL);
   if (stored && stored.trim().length > 0) {
-    // Purge any previously saved private LAN IP or legacy preview port 3090 from localStorage
-    if (stored.includes('192.168.68.') || stored.includes(':3090')) {
+    // Purge any legacy preview port 3090 from localStorage
+    if (stored.includes(':3090')) {
       localStorage.removeItem(STORAGE_KEYS.SERVER_URL);
       return typeof window !== 'undefined' ? window.location.origin : DEFAULT_DEV_SERVER;
     }
