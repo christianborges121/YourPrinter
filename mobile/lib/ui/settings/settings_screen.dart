@@ -158,7 +158,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('YourPrinter Mobile v1.0.13', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        Text('YourPrinter Mobile v1.0.14', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                         SizedBox(height: 4),
                         Text('Cross-platform 3D printing telemetry and camera client for YourPrinter and Bambu Lab printers.',
                             style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
