@@ -315,6 +315,7 @@ class ApiClient {
       threshold?: number;
       auto_pause_enabled?: boolean;
       check_interval_sec?: number;
+      consecutive_required?: number;
     },
     contextId?: string
   ): Promise<{ success: boolean }> {

@@ -29,6 +29,7 @@ class WatchdogStatusData {
   final bool autoPauseEnabled;
   final bool autoPauseTriggered;
   final int consecutiveFailures;
+  final int consecutiveRequired;
   final int checkIntervalSec;
   final String? activeJob;
 
@@ -40,6 +41,7 @@ class WatchdogStatusData {
     required this.autoPauseEnabled,
     required this.autoPauseTriggered,
     this.consecutiveFailures = 0,
+    this.consecutiveRequired = 2,
     this.checkIntervalSec = 15,
     this.activeJob,
   });
@@ -53,6 +55,7 @@ class WatchdogStatusData {
       autoPauseEnabled: json['auto_pause_enabled'] as bool? ?? false,
       autoPauseTriggered: json['auto_pause_triggered'] as bool? ?? false,
       consecutiveFailures: (json['consecutive_failures'] as num?)?.toInt() ?? 0,
+      consecutiveRequired: (json['consecutive_required'] as num?)?.toInt() ?? 2,
       checkIntervalSec: (json['check_interval_sec'] as num?)?.toInt() ?? 15,
       activeJob: json['active_job'] as String?,
     );

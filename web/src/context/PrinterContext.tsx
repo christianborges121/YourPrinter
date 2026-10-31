@@ -49,7 +49,12 @@ interface PrinterContextType {
   setCoolingFanSpeed: (percent: number) => boolean | Promise<boolean>;
   loadSlot: (slotId: number) => Promise<boolean>;
   unloadMaterial: () => Promise<boolean>;
-  updateWatchdog: (config: { threshold?: number; auto_pause_enabled?: boolean; check_interval_sec?: number }) => Promise<boolean>;
+  updateWatchdog: (config: {
+    threshold?: number;
+    auto_pause_enabled?: boolean;
+    check_interval_sec?: number;
+    consecutive_required?: number;
+  }) => Promise<boolean>;
   jogAxis: (axis: string, distance: number) => boolean;
   extrudeFilament: (amountMm: number) => boolean;
   retractFilament: (amountMm: number) => boolean;
@@ -467,7 +472,12 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [activeContextId, refreshStatus]);
 
   const updateWatchdog = useCallback(
-    async (config: { threshold?: number; auto_pause_enabled?: boolean; check_interval_sec?: number }) => {
+    async (config: {
+      threshold?: number;
+      auto_pause_enabled?: boolean;
+      check_interval_sec?: number;
+      consecutive_required?: number;
+    }) => {
       const res = await api.updateWatchdogConfig(config, activeContextId || undefined);
       if (res.success) await refreshStatus();
       return res.success;

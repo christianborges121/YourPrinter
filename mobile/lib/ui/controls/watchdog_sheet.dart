@@ -19,6 +19,7 @@ class _WatchdogSheetState extends ConsumerState<WatchdogSheet> {
   double _threshold = 0.20;
   bool _autoPause = true;
   int _checkIntervalSec = 15;
+  int _consecutiveRequired = 2;
   List<WatchdogSnapshotItem> _snapshots = [];
   bool _loadingSnapshots = false;
   String? _selectedSnapshotFilename;
@@ -31,6 +32,7 @@ class _WatchdogSheetState extends ConsumerState<WatchdogSheet> {
       _threshold = watchdog.threshold;
       _autoPause = watchdog.autoPauseEnabled;
       _checkIntervalSec = watchdog.checkIntervalSec;
+      _consecutiveRequired = watchdog.consecutiveRequired;
     }
     _fetchSnapshots();
   }
@@ -155,7 +157,12 @@ class _WatchdogSheetState extends ConsumerState<WatchdogSheet> {
                 setState(() => _threshold = val);
               },
               onChangeEnd: (val) {
-                printerService.updateWatchdogConfig(threshold: val, autoPause: _autoPause, checkIntervalSec: _checkIntervalSec);
+                printerService.updateWatchdogConfig(
+                  threshold: val,
+                  autoPause: _autoPause,
+                  checkIntervalSec: _checkIntervalSec,
+                  consecutiveRequired: _consecutiveRequired,
+                );
               },
             ),
             const SizedBox(height: 8),
@@ -169,7 +176,12 @@ class _WatchdogSheetState extends ConsumerState<WatchdogSheet> {
               contentPadding: EdgeInsets.zero,
               onChanged: (val) {
                 setState(() => _autoPause = val);
-                printerService.updateWatchdogConfig(threshold: _threshold, autoPause: val, checkIntervalSec: _checkIntervalSec);
+                printerService.updateWatchdogConfig(
+                  threshold: _threshold,
+                  autoPause: val,
+                  checkIntervalSec: _checkIntervalSec,
+                  consecutiveRequired: _consecutiveRequired,
+                );
               },
             ),
             const SizedBox(height: 12),
@@ -198,11 +210,13 @@ class _WatchdogSheetState extends ConsumerState<WatchdogSheet> {
                       dropdownColor: AppColors.surfaceSecondary,
                       isDense: true,
                       items: const [
+                        DropdownMenuItem(value: 5, child: Text('5 sec', style: TextStyle(fontSize: 13))),
                         DropdownMenuItem(value: 10, child: Text('10 sec', style: TextStyle(fontSize: 13))),
                         DropdownMenuItem(value: 15, child: Text('15 sec (Default)', style: TextStyle(fontSize: 13))),
                         DropdownMenuItem(value: 30, child: Text('30 sec', style: TextStyle(fontSize: 13))),
                         DropdownMenuItem(value: 60, child: Text('60 sec (1 min)', style: TextStyle(fontSize: 13))),
                         DropdownMenuItem(value: 120, child: Text('120 sec (2 min)', style: TextStyle(fontSize: 13))),
+                        DropdownMenuItem(value: 300, child: Text('300 sec (5 min)', style: TextStyle(fontSize: 13))),
                       ],
                       onChanged: (val) {
                         if (val != null) {
@@ -211,6 +225,55 @@ class _WatchdogSheetState extends ConsumerState<WatchdogSheet> {
                             threshold: _threshold,
                             autoPause: _autoPause,
                             checkIntervalSec: val,
+                            consecutiveRequired: _consecutiveRequired,
+                          );
+                        }
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Required Subsequent Defects Dropdown
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Required Subsequent Defects', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    Text('Consecutive positive frames before alert/pause', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                  ],
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.borderSubtle),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<int>(
+                      value: _consecutiveRequired,
+                      dropdownColor: AppColors.surfaceSecondary,
+                      isDense: true,
+                      items: const [
+                        DropdownMenuItem(value: 1, child: Text('1 (Instant)', style: TextStyle(fontSize: 13))),
+                        DropdownMenuItem(value: 2, child: Text('2 (Recommended)', style: TextStyle(fontSize: 13))),
+                        DropdownMenuItem(value: 3, child: Text('3 (Conservative)', style: TextStyle(fontSize: 13))),
+                        DropdownMenuItem(value: 5, child: Text('5 (Strict)', style: TextStyle(fontSize: 13))),
+                        DropdownMenuItem(value: 10, child: Text('10 (High Tolerance)', style: TextStyle(fontSize: 13))),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() => _consecutiveRequired = val);
+                          printerService.updateWatchdogConfig(
+                            threshold: _threshold,
+                            autoPause: _autoPause,
+                            checkIntervalSec: _checkIntervalSec,
+                            consecutiveRequired: val,
                           );
                         }
                       },
