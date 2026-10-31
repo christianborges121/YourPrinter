@@ -14,6 +14,7 @@ services:
       - WEBUI_PORT=${WEBUI_PORT:-3000}
       - PRINTER_SPEC=${PRINTER_SPEC:-}
       - WEBUI_PASSWORD=${WEBUI_PASSWORD:-}
+      - WATCHDOG_URL=${WATCHDOG_URL:-http://192.168.68.120:8085}
     volumes:
       - /media/Safe-Storage/AppData/yourprinter/config:/root/.config/YourPrinter
 

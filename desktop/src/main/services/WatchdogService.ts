@@ -34,7 +34,7 @@ export interface WatchdogSnapshotItem {
   layer: string;
 }
 
-const DEFAULT_WATCHDOG_URL = process.env.WATCHDOG_URL || 'http://localhost:8085';
+const DEFAULT_WATCHDOG_URL = process.env.WATCHDOG_URL || 'http://192.168.68.120:8085';
 
 export class WatchdogService {
   private static instance: WatchdogService | null = null;
