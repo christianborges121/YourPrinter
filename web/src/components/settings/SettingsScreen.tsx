@@ -572,7 +572,7 @@ export const SettingsScreen: React.FC = () => {
               Continuous Live Streaming by Default
             </span>
             <span className="text-[11px] text-[#94A3B8]">
-              Disable the 30-second bandwidth conservation timeout
+              Disable the 30-second stream timeout
             </span>
           </div>
 
@@ -597,7 +597,7 @@ export const SettingsScreen: React.FC = () => {
             <div className="flex flex-col">
               <span className="text-xs font-semibold text-[#F3F4F6]">Custom Camera Stream URL</span>
               <span className="text-[11px] text-[#94A3B8]">
-                Override default RTSP/MJPEG stream (essential for CFW / Klipper / Crowsnest)
+                Override default camera stream (essential for CFW / Klipper / Crowsnest)
               </span>
             </div>
             <button
@@ -643,7 +643,7 @@ export const SettingsScreen: React.FC = () => {
               )}
 
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] text-[#94A3B8] font-semibold">Stream URL (MJPEG / RTSP / HTTP)</label>
+                <label className="text-[11px] text-[#94A3B8] font-semibold">Stream URL (RTSP / HTTP)</label>
                 <input
                   type="text"
                   value={customCamUrl}
@@ -668,7 +668,7 @@ export const SettingsScreen: React.FC = () => {
                         onClick={() => setCustomCamUrl(`http://${ip}:8080/?action=stream`)}
                         className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#262626] hover:bg-[#383838] border border-[#2E2E2E] text-[#D1D5DB]"
                       >
-                        Port 8080 (MJPEG)
+                        Port 8080 (HTTP)
                       </button>
                       <button
                         type="button"

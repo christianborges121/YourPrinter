@@ -265,7 +265,7 @@ export const FleetScreen: React.FC<FleetScreenProps> = ({ onNavigateTab }) => {
                 <button
                   onClick={handlePauseAll}
                   className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-[#D1D5DB] hover:text-[#EF4444] transition-colors"
-                  title="Pause all live camera streams to save bandwidth"
+                  title="Pause all live camera streams"
                 >
                   <Pause size={12} />
                   <span>Pause All</span>

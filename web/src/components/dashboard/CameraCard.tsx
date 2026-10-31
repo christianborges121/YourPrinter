@@ -388,7 +388,7 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
             >
               <Play size={24} className="ml-1" />
             </button>
-            <p className="text-xs text-[#D1D5DB] font-medium">Stream Paused to Conserve Bandwidth</p>
+            <p className="text-xs text-[#D1D5DB] font-medium">Stream Paused</p>
             <p className="text-[11px] text-[#94A3B8]">Click to resume 30-second live preview</p>
           </div>
         )}
@@ -428,7 +428,7 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
         {/* Top-Left Badge: Mode indicator */}
         {isPlaying && (
           <div className="absolute top-3 left-3 bg-black/50 backdrop-blur-md px-2 py-0.5 rounded text-[10px] font-medium text-[#94A3B8] border border-white/5 uppercase">
-            {streamMode === 'webrtc' ? 'Go2rtc WebRTC' : 'MJPEG Snapshot'}
+            {streamMode === 'webrtc' ? 'Live HD' : 'Live Stream'}
           </div>
         )}
       </div>

@@ -129,7 +129,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   SwitchListTile(
                     title: const Text('Stream Continuously', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                     subtitle: const Text(
-                      'Override the 30-second camera timeout limit. Note: Conserves printer CPU & bandwidth when off.',
+                      'Override the 30-second camera timeout limit.',
                       style: TextStyle(fontSize: 11, color: AppColors.textMuted),
                     ),
                     value: cameraService.continuousOverride,
