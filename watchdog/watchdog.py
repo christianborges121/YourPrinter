@@ -27,17 +27,29 @@ import requests
 
 # Load optional .env file if available
 def load_dotenv():
-    env_path = os.path.join(os.path.dirname(__file__), '.env')
-    if os.path.exists(env_path):
-        with open(env_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#') and '=' in line:
-                    key, val = line.split('=', 1)
-                    key = key.strip()
-                    val = val.strip().strip('"').strip("'")
-                    if key and key not in os.environ:
-                        os.environ[key] = val
+    candidate_paths = [
+        os.path.join(os.path.dirname(__file__), '.env'),
+        os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env'),
+        os.path.join(os.getcwd(), '.env'),
+        '/app/.env',
+        '/media/Safe-Storage/Projects/YourPrinter/.env',
+        '/media/Safe-Storage/Projects/obico-stream-watchdog/.env'
+    ]
+    for env_path in candidate_paths:
+        if os.path.exists(env_path) and os.path.isfile(env_path):
+            try:
+                with open(env_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith('#') and '=' in line:
+                            key, val = line.split('=', 1)
+                            key = key.strip()
+                            val = val.strip().strip('"').strip("'")
+                            current = os.environ.get(key)
+                            if key and (current is None or not str(current).strip()):
+                                os.environ[key] = val
+            except Exception as e:
+                print(f"[!] Error reading {env_path}: {e}", flush=True)
 
 load_dotenv()
 
@@ -287,9 +299,36 @@ def list_snapshots(folder, filter_slug=None):
     return results
 
 
+def get_effective_discord_webhook():
+    """Returns the active Discord webhook URL, resolving from environment or WebUI settings."""
+    global DISCORD_WEBHOOK
+    if DISCORD_WEBHOOK and DISCORD_WEBHOOK.strip():
+        return DISCORD_WEBHOOK.strip()
+
+    # Dynamic fallback: check WebUI notifications API
+    try:
+        url = f"{FLASHFORGE_UI_URL.rstrip('/')}/api/notifications/discord"
+        req = urllib.request.Request(url, headers={"User-Agent": "Obico-Stream-Watchdog/2.0"})
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            if resp.status == 200:
+                data = json.loads(resp.read().decode('utf-8', errors='ignore'))
+                wh = (data.get("webhookUrl") or "").strip()
+                if wh:
+                    DISCORD_WEBHOOK = wh
+                    return wh
+    except Exception:
+        pass
+    return ""
+
+
 def send_discord_alert(title, description, color, image_bytes=None, is_alert=False, printer_name=None):
     """Sends a clean embed message to the configured Discord webhook."""
-    if not DISCORD_WEBHOOK:
+    webhook_url = get_effective_discord_webhook()
+    if not webhook_url:
+        now = time.time()
+        if now - getattr(send_discord_alert, "_last_missing_log", 0) > 120:
+            send_discord_alert._last_missing_log = now
+            print(f"[⚠️ Discord] Notice: Alert '{title}' not delivered (no DISCORD_WEBHOOK configured in .env or WebUI)", flush=True)
         return
 
     pname = printer_name or PRINTER_NAME
@@ -313,11 +352,11 @@ def send_discord_alert(title, description, color, image_bytes=None, is_alert=Fal
                 "payload_json": (None, json.dumps(payload), "application/json"),
                 "file": ("detection.jpg", image_bytes, "image/jpeg")
             }
-            resp = requests.post(DISCORD_WEBHOOK, files=files, headers=headers, timeout=10)
+            resp = requests.post(webhook_url, files=files, headers=headers, timeout=10)
         else:
-            resp = requests.post(DISCORD_WEBHOOK, json=payload, headers=headers, timeout=10)
+            resp = requests.post(webhook_url, json=payload, headers=headers, timeout=10)
 
-        print(f"[+] Discord notification sent for {pname} (HTTP {resp.status_code})", flush=True)
+        print(f"[+] Discord notification sent for {pname} (HTTP {resp.status_code}): {title}", flush=True)
     except Exception as err:
         print(f"[-] Discord delivery failed for {pname}: {err}", flush=True)
 
@@ -858,11 +897,17 @@ def start_api_server(port):
 # ==================== MAIN WATCHDOG LOOP ====================
 
 def main():
-    print(f"[*] Starting Obico Multi-Printer Watchdog for FlashForgeUI...", flush=True)
-    print(f"    FlashForgeUI Backend: {FLASHFORGE_UI_URL}", flush=True)
+    print(f"[*] Starting Obico Multi-Printer Watchdog for YourPrinter...", flush=True)
+    print(f"    YourPrinter Backend: {FLASHFORGE_UI_URL}", flush=True)
     print(f"    Check Interval: {CHECK_INTERVAL_SEC}s", flush=True)
     print(f"    Alert Cooldown: {ALERT_COOLDOWN_SEC}s", flush=True)
     print(f"    Auto-Pause On Failure: {AUTO_PAUSE_ON_FAILURE}", flush=True)
+    active_wh = get_effective_discord_webhook()
+    if active_wh:
+        masked = active_wh[:35] + "..." + active_wh[-6:] if len(active_wh) > 42 else "***"
+        print(f"    Discord Webhook: Configured ({masked})", flush=True)
+    else:
+        print(f"    Discord Webhook: [DISABLED] Set DISCORD_WEBHOOK in .env or via WebUI Settings", flush=True)
 
     # Start background API server
     api_thread = threading.Thread(target=start_api_server, args=(WATCHDOG_API_PORT,), daemon=True)

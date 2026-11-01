@@ -37,6 +37,11 @@ services:
     restart: unless-stopped
     ports:
       - "${WATCHDOG_PORT:-8085}:8085"
+    env_file:
+      - path: ./.env
+        required: false
+      - path: ./watchdog/.env
+        required: false
     environment:
       - WATCHDOG_API_PORT=8085
       - FLASHFORGE_UI_URL=${FLASHFORGE_UI_URL:-http://yourprinter:3000}
