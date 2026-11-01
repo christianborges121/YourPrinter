@@ -14,7 +14,7 @@ services:
       - WEBUI_PORT=${WEBUI_PORT:-3000}
       - PRINTER_SPEC=${PRINTER_SPEC:-}
       - WEBUI_PASSWORD=${WEBUI_PASSWORD:-}
-      - WATCHDOG_URL=${WATCHDOG_URL:-http://host.docker.internal:8085}
+      - WATCHDOG_URL=${WATCHDOG_URL:-http://watchdog:8085}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -28,5 +28,50 @@ services:
     restart: unless-stopped
     ports:
       - "3080:80"
+    depends_on:
+      - yourprinter
+
+  watchdog:
+    image: ghcr.io/imagegenius/obico:cuda
+    container_name: yourprinter-watchdog
+    restart: unless-stopped
+    ports:
+      - "8085:8085"
+    environment:
+      - WATCHDOG_API_PORT=8085
+      - FLASHFORGE_UI_URL=${FLASHFORGE_UI_URL:-http://yourprinter:3000}
+      - DISCORD_WEBHOOK=${DISCORD_WEBHOOK:-}
+      - PRINTER_NAME=${PRINTER_NAME:-Flashforge Creator 5 Pro}
+      - CHECK_INTERVAL_SEC=${CHECK_INTERVAL_SEC:-15}
+      - CONFIDENCE_THRESHOLD=${CONFIDENCE_THRESHOLD:-0.20}
+      - CONSECUTIVE_REQUIRED=${CONSECUTIVE_REQUIRED:-2}
+      - AUTO_PAUSE_ON_FAILURE=${AUTO_PAUSE_ON_FAILURE:-true}
+      - SNAPSHOTS_DIR=/app/snapshots
+      - WATCH_ONLY_WHILE_PRINTING=${WATCH_ONLY_WHILE_PRINTING:-true}
+      - PRINTER_TYPE=${PRINTER_TYPE:-flashforge}
+      - PRINTER_IP=${PRINTER_IP:-}
+      - FLASHFORGE_SERIAL=${FLASHFORGE_SERIAL:-}
+      - FLASHFORGE_CHECK_CODE=${FLASHFORGE_CHECK_CODE:-}
+      - FLASHFORGE_PORT=${FLASHFORGE_PORT:-8898}
+      - IDLE_POLL_INTERVAL_SEC=${IDLE_POLL_INTERVAL_SEC:-15}
+      - ALERT_COOLDOWN_SEC=${ALERT_COOLDOWN_SEC:-60}
+      - SEND_STARTUP_ALERT=${SEND_STARTUP_ALERT:-true}
+      - SEND_PRINT_START_ALERT=${SEND_PRINT_START_ALERT:-true}
+      - SEND_PRINT_PROGRESS_ALERT=${SEND_PRINT_PROGRESS_ALERT:-true}
+      - SEND_PRINT_PAUSE_ALERT=${SEND_PRINT_PAUSE_ALERT:-true}
+      - SEND_PRINT_RESUME_ALERT=${SEND_PRINT_RESUME_ALERT:-true}
+      - SEND_PRINT_COMPLETE_ALERT=${SEND_PRINT_COMPLETE_ALERT:-true}
+      - SEND_RESOLVED_ALERT=${SEND_RESOLVED_ALERT:-true}
+    volumes:
+      - ./watchdog/watchdog.py:/app/watchdog.py:ro
+      - /media/Safe-Storage/AppData/yourprinter/snapshots:/app/snapshots
+    entrypoint: ["/usr/bin/python3.10", "/app/watchdog.py"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     depends_on:
       - yourprinter

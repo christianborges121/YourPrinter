@@ -54,7 +54,24 @@ YourPrinter/
 
 ## Quick Start
 
-### 1. Desktop & Headless Server + WebUI (`desktop/` & `web/`)
+### 1. Docker Compose (Unified Server, WebUI & AI Watchdog)
+
+The entire suite runs as a unified stack with zero external dependencies:
+
+```bash
+docker compose up -d --build
+```
+
+- **`yourprinter`**: Headless backend server with go2rtc camera proxy & printer backends.
+- **`yourprinter-web`**: Fast React WebUI served via Nginx on port `3080` (`http://localhost:3080`).
+- **`watchdog`**: Obico YOLO Darknet AI failure/spaghetti monitor on GPU port `8085`.
+
+To configure Discord notifications and custom thresholds, copy `watchdog/.env.example` to `.env`:
+```bash
+cp watchdog/.env.example .env
+```
+
+### 2. Desktop & Headless Server + WebUI (`desktop/` & `web/`)
 
 ```powershell
 cd desktop
@@ -69,7 +86,7 @@ pnpm start
   pnpm run build:webui
   ```
 
-### 2. Mobile App (`mobile/`)
+### 3. Mobile App (`mobile/`)
 
 ```powershell
 cd mobile
