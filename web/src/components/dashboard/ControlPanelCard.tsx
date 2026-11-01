@@ -4,7 +4,7 @@ import { usePrinter } from '../../context/PrinterContext';
 import { JogModal } from '../modals/JogModal';
 
 export const ControlPanelCard: React.FC = () => {
-  const { status, features, capabilities, homeAxes, setLed, setFiltration, setCoolingFanSpeed } = usePrinter();
+  const { status, features, capabilities, activeContext, homeAxes, setLed, setFiltration, setCoolingFanSpeed } = usePrinter();
   const [jogModalOpen, setJogModalOpen] = useState(false);
   const [ledState, setLedState] = useState(true);
   const [isHoming, setIsHoming] = useState(false);
@@ -13,8 +13,20 @@ export const ControlPanelCard: React.FC = () => {
 
   const stateStr = status?.printerState || '';
   const isPrinting = /print|busy|running/i.test(stateStr);
-  const canJog = capabilities ? capabilities.canJog : true;
-  const canHome = capabilities ? capabilities.canHome : true;
+
+  const modelStr = (activeContext?.model || '').toLowerCase();
+  const nameStr = (activeContext?.name || '').toLowerCase();
+  const isCreator5 =
+    modelStr.includes('creator') ||
+    nameStr.includes('creator') ||
+    (modelStr.includes('ad5x') && nameStr.includes('c5'));
+
+  // Pin hardware capabilities for Creator 5 Pro to avoid options jumping/flickering
+  const canJog = isCreator5 ? false : capabilities ? capabilities.canJog : false;
+  const canHome = isCreator5 ? false : capabilities ? capabilities.canHome : false;
+  const hasPartCoolingFan = isCreator5 ? true : (capabilities?.hasPartCoolingFan ?? true);
+  const hasFiltration = isCreator5 ? true : (capabilities ? capabilities.hasFiltration : (features?.hasFiltration ?? false));
+  const hasLedControl = isCreator5 ? true : (capabilities?.hasLedControl ?? (features?.hasLED ?? true));
 
   const activeFiltration =
     selectedFiltration ?? (status?.filtrationMode === 'none' || !status?.filtrationMode ? 'off' : status.filtrationMode);
@@ -111,7 +123,7 @@ export const ControlPanelCard: React.FC = () => {
       </div>
 
       {/* Part Cooling Fan Speed */}
-      {(capabilities?.hasPartCoolingFan ?? true) && (
+      {hasPartCoolingFan && (
         <div className="flex flex-col gap-2.5 p-3 rounded-lg bg-[#262626]/60 border border-[#2E2E2E]">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-[#F3F4F6] flex items-center gap-1.5">
@@ -166,7 +178,7 @@ export const ControlPanelCard: React.FC = () => {
       )}
 
       {/* Air Filtration Fan */}
-      {(capabilities ? capabilities.hasFiltration : (features?.hasFiltration ?? false)) && (
+      {hasFiltration && (
         <div className="flex flex-col gap-2 p-3 rounded-lg bg-[#262626]/60 border border-[#2E2E2E]">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-[#F3F4F6] flex items-center gap-1.5">
@@ -208,7 +220,7 @@ export const ControlPanelCard: React.FC = () => {
       )}
 
       {/* LED Light Switch */}
-      {(capabilities?.hasLedControl ?? (features?.hasLED ?? true)) && (
+      {hasLedControl && (
         <div className="flex items-center justify-between p-3 rounded-lg bg-[#262626]/60 border border-[#2E2E2E]">
           <div className="flex items-center gap-2.5">
             <Lightbulb

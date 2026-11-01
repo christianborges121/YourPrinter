@@ -232,6 +232,7 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
 
       // Check product info for circulation and filtration fan capabilities
       const hasFiltration =
+        isCreator5 ||
         (this.productInfo.internalFanCtrlState !== undefined && this.productInfo.internalFanCtrlState !== 0) ||
         (this.productInfo.externalFanCtrlState !== undefined && this.productInfo.externalFanCtrlState !== 0);
 
@@ -1534,6 +1535,11 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
         (this.printerDetails?.IPAddress as string) ||
         '';
 
+      if (!ip) {
+        console.warn('[DualAPIBackend] Cannot send HTTP temperature command: Missing IP address');
+        return false;
+      }
+
       const res = await fetch(`http://${ip}:8898/control`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1551,8 +1557,16 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
             },
           },
         }),
+        signal: AbortSignal.timeout(4000),
       });
-      const data = (await res.json()) as { code?: number };
+
+      if (!res.ok) {
+        console.warn(`[DualAPIBackend] temperatureCtl_cmd failed with HTTP ${res.status}: ${res.statusText}`);
+        return false;
+      }
+
+      const data = (await res.json()) as { code?: number; message?: string };
+      console.log(`[DualAPIBackend] temperatureCtl_cmd response (chamber: ${chamber}, platform: ${platform}):`, data);
       return data?.code === 0;
     } catch (error) {
       console.warn('[DualAPIBackend] Failed to send HTTP temperature command:', error);

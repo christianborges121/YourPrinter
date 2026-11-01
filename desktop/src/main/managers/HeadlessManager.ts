@@ -346,7 +346,7 @@ export class HeadlessManager extends EventEmitter {
 
       if (isActiveContext) {
         console.log(`[HeadlessManager] Forwarding polling data for active context ${contextId} to WebUI`);
-        this.webUIManager.handlePollingUpdate(data);
+        this.webUIManager.handlePollingUpdate(data, contextId);
       } else {
         console.log(
           `[HeadlessManager] Skipping polling data for inactive context ${contextId}; active context is ${activeContextId ?? 'none'}`

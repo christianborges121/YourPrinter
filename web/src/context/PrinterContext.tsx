@@ -246,8 +246,56 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
       activeJobCacheRef.current = null;
     }
 
-    setStatus(stabilized);
+    setStatus((prevStatus) => {
+      // Merge with previous status to prevent telemetry flickering/dropout
+      const coolingFan =
+        stabilized.coolingFanSpeed !== undefined
+          ? stabilized.coolingFanSpeed
+          : stabilized.fanSpeed !== undefined
+          ? stabilized.fanSpeed
+          : prevStatus?.coolingFanSpeed;
+
+      const chamberFan =
+        stabilized.chamberFanSpeed !== undefined
+          ? stabilized.chamberFanSpeed
+          : prevStatus?.chamberFanSpeed;
+
+      const led =
+        stabilized.ledState !== undefined
+          ? stabilized.ledState
+          : prevStatus?.ledState;
+
+      const filtration =
+        stabilized.filtrationMode && stabilized.filtrationMode !== 'none'
+          ? stabilized.filtrationMode
+          : prevStatus?.filtrationMode || stabilized.filtrationMode || 'none';
+
+      const chamberTemp =
+        stabilized.chamberTemperature !== undefined && stabilized.chamberTemperature > 0
+          ? stabilized.chamberTemperature
+          : prevStatus?.chamberTemperature;
+
+      const chamberTargetTemp =
+        stabilized.chamberTargetTemperature !== undefined
+          ? stabilized.chamberTargetTemperature
+          : prevStatus?.chamberTargetTemperature;
+
+      return {
+        ...prevStatus,
+        ...stabilized,
+        coolingFanSpeed: coolingFan,
+        fanSpeed: coolingFan,
+        chamberFanSpeed: chamberFan,
+        ledState: led,
+        filtrationMode: filtration,
+        chamberTemperature: chamberTemp,
+        chamberTargetTemperature: chamberTargetTemp,
+      };
+    });
   }, []);
+
+  // Cache features across poll updates to prevent capability flickering
+  const featuresCacheRef = useRef<Map<string, PrinterFeatures>>(new Map());
 
   // Fetch Printer Status, Features, Station, and Spool
   const refreshStatus = useCallback(async () => {
@@ -265,6 +313,11 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
       if (featuresRes.status === 'fulfilled' && featuresRes.value.features) {
         setFeatures(featuresRes.value.features);
+        if (currentId) {
+          featuresCacheRef.current.set(currentId, featuresRes.value.features);
+        }
+      } else if (currentId && featuresCacheRef.current.has(currentId)) {
+        setFeatures(featuresCacheRef.current.get(currentId)!);
       }
       if (stationRes.status === 'fulfilled' && stationRes.value.status) {
         setMaterialStation(stationRes.value.status);
@@ -275,7 +328,7 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } catch {
       // Telemetry fetch failed
     }
-  }, []);
+  }, [applyStatusWithStabilization]);
 
   // Fetch Fleet Overview
   const refreshFleet = useCallback(async () => {
@@ -308,6 +361,9 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (resolvedActive) {
           setActiveContextId(resolvedActive);
           setSavedContextId(resolvedActive);
+          if (res.activeContextId && resolvedActive !== res.activeContextId) {
+            void api.switchContext(resolvedActive).catch(() => {});
+          }
         }
       }
     } catch {
@@ -330,7 +386,12 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
     refreshAll();
     wsClient.connect();
 
-    const unbindStatus = wsClient.onStatus((wsStatus) => {
+    const unbindStatus = wsClient.onStatus((wsStatus, msgContextId) => {
+      const activeId = activeContextIdRef.current;
+      // Filter out WebSocket telemetry packets belonging to other printer contexts
+      if (msgContextId && activeId && msgContextId !== activeId) {
+        return;
+      }
       applyStatusWithStabilization(wsStatus);
     });
 
@@ -410,6 +471,12 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
     async (contextId: string): Promise<boolean> => {
       try {
         activeJobCacheRef.current = null;
+        if (featuresCacheRef.current.has(contextId)) {
+          setFeatures(featuresCacheRef.current.get(contextId)!);
+        } else {
+          setFeatures(null);
+        }
+        setStatus(null);
         const res = await api.switchContext(contextId);
         if (res.success) {
           setActiveContextId(contextId);

@@ -4,7 +4,18 @@ import { usePrinter } from '../../context/PrinterContext';
 import { TempSetpointModal } from '../modals/TempSetpointModal';
 
 export const TemperatureCard: React.FC = () => {
-  const { status, capabilities, setBedTemp, setExtruderTemp, setChamberTemp } = usePrinter();
+  const { status, capabilities, activeContext, setBedTemp, setExtruderTemp, setChamberTemp } = usePrinter();
+
+  const modelStr = (activeContext?.model || '').toLowerCase();
+  const nameStr = (activeContext?.name || '').toLowerCase();
+  const isCreator5 =
+    modelStr.includes('creator') ||
+    nameStr.includes('creator') ||
+    (modelStr.includes('ad5x') && nameStr.includes('c5'));
+
+  const hasChamberHeater =
+    isCreator5 ||
+    (capabilities?.hasChamberHeater ?? (status?.chamberTemperature !== undefined && status.chamberTemperature > 0));
 
   const [modalConfig, setModalConfig] = useState<{
     isOpen: boolean;
@@ -69,7 +80,7 @@ export const TemperatureCard: React.FC = () => {
       isOpen: true,
       title: 'Set Chamber Temperature',
       currentVal: status.chamberTargetTemperature || 0,
-      maxTemp: capabilities?.maxChamberTemp || 80,
+      maxTemp: capabilities?.maxChamberTemp || (isCreator5 ? 80 : 60),
       isExtruder: false,
       isChamber: true,
     });
@@ -186,7 +197,7 @@ export const TemperatureCard: React.FC = () => {
       })}
 
       {/* Chamber Temperature (if supported) */}
-      {(capabilities?.hasChamberHeater ?? (status.chamberTemperature !== undefined && status.chamberTemperature > 0)) && (
+      {hasChamberHeater && (
         <button
           onClick={openChamberModal}
           className="w-full flex items-center justify-between p-2.5 rounded-lg bg-[#262626]/60 hover:bg-[#262626] border border-[#2E2E2E] transition-all text-left group"

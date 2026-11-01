@@ -494,7 +494,7 @@ export class WebSocketManager extends EventEmitter {
   /**
    * Format polling data for WebSocket transmission
    */
-  private formatPollingData(data: PollingData): PrinterStatusData | null {
+  private formatPollingData(data: PollingData, contextId?: string): PrinterStatusData | null {
     if (!data.printerStatus) {
       return null;
     }
@@ -512,6 +512,29 @@ export class WebSocketManager extends EventEmitter {
                        (data.printerStatus as unknown as Record<string, unknown>);
     const rawToolTemps = Array.isArray(rawBackend?.toolTemps) ? (rawBackend.toolTemps as unknown[]) : undefined;
     const rawToolTargetTemps = Array.isArray(rawBackend?.toolTargetTemps) ? (rawBackend.toolTargetTemps as unknown[]) : undefined;
+
+    const coolingFanSpeed =
+      typeof (rawBackend as { coolingFanSpeed?: number })?.coolingFanSpeed === 'number'
+        ? (rawBackend as { coolingFanSpeed?: number }).coolingFanSpeed
+        : typeof (status.fans as { coolingFan?: number } | undefined)?.coolingFan === 'number'
+        ? (status.fans as { coolingFan: number }).coolingFan
+        : undefined;
+
+    const chamberFanSpeed =
+      typeof (rawBackend as { chamberFanSpeed?: number })?.chamberFanSpeed === 'number'
+        ? (rawBackend as { chamberFanSpeed?: number }).chamberFanSpeed
+        : typeof (status.fans as { chamberFan?: number } | undefined)?.chamberFan === 'number'
+        ? (status.fans as { chamberFan: number }).chamberFan
+        : undefined;
+
+    const ledState =
+      typeof (rawBackend as { ledState?: boolean })?.ledState === 'boolean'
+        ? (rawBackend as { ledState?: boolean }).ledState
+        : typeof (rawBackend as { led?: boolean })?.led === 'boolean'
+        ? (rawBackend as { led?: boolean }).led
+        : typeof (rawBackend as { lightStatus?: string })?.lightStatus === 'string'
+        ? (rawBackend as { lightStatus?: string }).lightStatus === 'open' || (rawBackend as { lightStatus?: string }).lightStatus === 'on'
+        : undefined;
 
     const toolTemps = rawTools && rawTools.length > 0
       ? rawTools.map(t => Math.round(t.current || 0))
@@ -587,6 +610,7 @@ export class WebSocketManager extends EventEmitter {
     }
 
     return {
+      contextId: contextId || (data as unknown as { contextId?: string }).contextId || (status as unknown as { contextId?: string }).contextId || undefined,
       printerState: status.state, // Note: 'state' not 'printerState'
       bedTemperature: Math.round(bedTemp.current),
       bedTargetTemperature: Math.round(bedTemp.target),
@@ -596,6 +620,10 @@ export class WebSocketManager extends EventEmitter {
       chamberTargetTemperature: Math.round(chamberTemp.target || 0),
       toolTemps,
       toolTargetTemps,
+      ledState,
+      coolingFanSpeed: typeof coolingFanSpeed === 'number' ? Math.round(coolingFanSpeed) : undefined,
+      chamberFanSpeed: typeof chamberFanSpeed === 'number' ? Math.round(chamberFanSpeed) : undefined,
+      fanSpeed: typeof coolingFanSpeed === 'number' ? Math.round(coolingFanSpeed) : undefined,
       // Progress from currentJob if available (100% when completed)
       progress: effectiveProgress,
       currentLayer: effectiveCurrentLayer,
@@ -622,10 +650,11 @@ export class WebSocketManager extends EventEmitter {
    * Broadcast printer status to all connected clients
    * Accepts PollingData from the polling service
    */
-  public async broadcastPrinterStatus(data: PollingData): Promise<void> {
-    void getWatchdogService().getStatus().catch(() => {});
+  public async broadcastPrinterStatus(data: PollingData, contextId?: string): Promise<void> {
+    const resolvedContextId = contextId || (data as unknown as { contextId?: string }).contextId;
+    void getWatchdogService().getStatus(resolvedContextId).catch(() => {});
     console.log(
-      `[WebSocketManager] broadcastPrinterStatus called - running: ${this.isRunning}, clients: ${this.clients.size}, hasData: ${!!data.printerStatus}`
+      `[WebSocketManager] broadcastPrinterStatus called (context: ${resolvedContextId || 'unknown'}) - running: ${this.isRunning}, clients: ${this.clients.size}, hasData: ${!!data.printerStatus}`
     );
 
     // Always store latest data, even if no clients connected (for API access)
@@ -637,7 +666,7 @@ export class WebSocketManager extends EventEmitter {
       return;
     }
 
-    const formattedStatus = this.formatPollingData(data);
+    const formattedStatus = this.formatPollingData(data, resolvedContextId);
     if (!formattedStatus) {
       console.log('[WebSocketManager] No formatted status to broadcast');
       return;
@@ -649,6 +678,7 @@ export class WebSocketManager extends EventEmitter {
       type: 'STATUS_UPDATE',
       timestamp: new Date().toISOString(),
       status: formattedStatus,
+      contextId: resolvedContextId,
     };
 
     this.broadcast(statusMessage);

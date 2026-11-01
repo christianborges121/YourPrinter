@@ -98,6 +98,7 @@ export interface WatchdogStatusData {
 }
 
 export interface PrinterStatusData {
+  contextId?: string;
   printerState: string;
   bedTemperature: number;
   bedTargetTemperature: number;
@@ -107,6 +108,10 @@ export interface PrinterStatusData {
   chamberTargetTemperature?: number;
   toolTemps?: number[];
   toolTargetTemps?: number[];
+  ledState?: boolean;
+  coolingFanSpeed?: number;
+  chamberFanSpeed?: number;
+  fanSpeed?: number;
   progress: number;
   currentLayer?: number;
   totalLayers?: number;

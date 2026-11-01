@@ -31,6 +31,7 @@ export const JobProgressCard: React.FC = () => {
     (rawProg >= 100 && !isPrinting && !!status.jobName);
 
   const progress = Math.min(Math.max(rawProg, 0), 100);
+  const isJobActive = isPrinting || isPaused || (Boolean(status.jobName) && progress > 0 && progress < 100 && !isCompleted);
 
   // Format seconds to H:MM or M:SS
   const formatTime = (seconds?: number): string => {
@@ -154,7 +155,7 @@ export const JobProgressCard: React.FC = () => {
       </div>
 
       {/* Control Buttons: Pause / Resume & Cancel */}
-      {(isPrinting || isPaused) && (
+      {isJobActive && (
         <div className="flex items-center gap-3 pt-1">
           <button
             onClick={handlePauseResume}

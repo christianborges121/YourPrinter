@@ -31,6 +31,7 @@ export interface WatchdogStatusData {
 }
 
 export interface PrinterStatusData {
+  contextId?: string;
   printerState: string;
   bedTemperature: number;
   bedTargetTemperature: number;

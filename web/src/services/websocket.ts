@@ -4,7 +4,7 @@
 import type { ActiveSpoolData, PrinterStatusData, WebSocketMessage } from '../types';
 import { getAuthToken, getServerUrl } from './config';
 
-export type StatusListener = (status: PrinterStatusData) => void;
+export type StatusListener = (status: PrinterStatusData, contextId?: string) => void;
 export type SpoolListener = (spool: ActiveSpoolData | null) => void;
 export type ConnectionListener = (connected: boolean) => void;
 
@@ -54,7 +54,7 @@ class WebSocketClient {
         try {
           const msg = JSON.parse(event.data) as WebSocketMessage;
           if (msg.type === 'STATUS_UPDATE' && msg.status) {
-            this.notifyStatus(msg.status);
+            this.notifyStatus(msg.status, msg.contextId || msg.status.contextId);
           } else if (msg.type === 'SPOOLMAN_UPDATE') {
             this.notifySpool(msg.spool || null);
           }
@@ -153,8 +153,8 @@ class WebSocketClient {
     return () => this.connectionListeners.delete(cb);
   }
 
-  private notifyStatus(status: PrinterStatusData): void {
-    this.statusListeners.forEach((cb) => cb(status));
+  private notifyStatus(status: PrinterStatusData, contextId?: string): void {
+    this.statusListeners.forEach((cb) => cb(status, contextId));
   }
 
   private notifySpool(spool: ActiveSpoolData | null): void {

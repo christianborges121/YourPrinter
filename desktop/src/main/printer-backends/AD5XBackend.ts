@@ -76,9 +76,9 @@ export class AD5XBackend extends DualAPIBackend {
         usesLegacyAPI: !isCreator5,
       },
       filtration: {
-        available: false, // Auto-detected from /product endpoint in DualAPIBackend
-        controllable: false,
-        reason: 'Filtration status detected from hardware product endpoint',
+        available: isCreator5, // Creator 5 / 5 Pro has factory chamber filtration
+        controllable: isCreator5,
+        reason: isCreator5 ? 'Creator 5 hardware chamber filtration' : 'Filtration status detected from hardware product endpoint',
       },
       gcodeCommands: {
         available: true,
