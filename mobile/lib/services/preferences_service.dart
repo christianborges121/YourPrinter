@@ -1,10 +1,14 @@
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/job_file.dart';
+import '../models/print_history.dart';
 
 class PreferencesService {
   static const String _keyServerUrl = 'yp_server_url';
   static const String _keyAuthToken = 'yp_auth_token';
   static const String _keyOverride30s = 'yp_camera_override_30s';
   static const String _keyLastContextId = 'yp_last_context_id';
+  static const String _keyPrintHistory = 'yourprinter_print_history';
 
   static const String _legacyKeyServerUrl = 'ff_server_url';
   static const String _legacyKeyAuthToken = 'ff_auth_token';
@@ -58,5 +62,86 @@ class PreferencesService {
 
   Future<bool> setLastContextId(String contextId) {
     return _prefs.setString(_keyLastContextId, contextId);
+  }
+
+  List<PrintHistoryItem> getPrintHistory() {
+    try {
+      final raw = _prefs.getString(_keyPrintHistory);
+      if (raw == null || raw.isEmpty) return [];
+      final parsed = jsonDecode(raw);
+      if (parsed is! List) return [];
+      return parsed
+          .whereType<Map<String, dynamic>>()
+          .map((item) => PrintHistoryItem.fromJson(item))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<bool> savePrintHistory(List<PrintHistoryItem> items) {
+    try {
+      final capped = items.take(200).map((i) => i.toJson()).toList();
+      return _prefs.setString(_keyPrintHistory, jsonEncode(capped));
+    } catch (_) {
+      return Future.value(false);
+    }
+  }
+
+  Future<PrintHistoryItem> addPrintHistoryItem(PrintHistoryItem item) async {
+    final current = getPrintHistory();
+    final isDuplicate = current.any((existing) =>
+        existing.filename == item.filename &&
+        (existing.endTime.difference(item.endTime).inSeconds.abs() < 60));
+
+    if (!isDuplicate) {
+      final updated = [item, ...current];
+      await savePrintHistory(updated);
+    }
+    return item;
+  }
+
+  Future<void> removePrintHistoryItem(String id) async {
+    final current = getPrintHistory();
+    final filtered = current.where((i) => i.id != id).toList();
+    await savePrintHistory(filtered);
+  }
+
+  Future<void> clearPrintHistory() async {
+    await _prefs.remove(_keyPrintHistory);
+  }
+
+  Future<void> seedHistoryFromRecentJobs(
+    List<WebUIJobFile> recentJobs,
+    String printerName,
+    String? contextId,
+  ) async {
+    final current = getPrintHistory();
+    if (current.isNotEmpty || recentJobs.isEmpty) return;
+
+    final now = DateTime.now();
+    final seeded = recentJobs.take(10).toList().asMap().entries.map((entry) {
+      final idx = entry.key;
+      final job = entry.value;
+      final end = now.subtract(Duration(days: idx, hours: 1));
+      final duration = job.printTime ?? 3600;
+      final start = end.subtract(Duration(seconds: duration));
+
+      return PrintHistoryItem(
+        id: 'seed-$idx-${now.millisecondsSinceEpoch}',
+        filename: job.filename,
+        displayName: job.displayName ?? job.filename.replaceAll(RegExp(r'\.(gcode|3mf|gx|g)$', caseSensitive: false), ''),
+        printerName: printerName.isNotEmpty ? printerName : 'Flashforge Printer',
+        contextId: contextId,
+        startTime: start,
+        endTime: end,
+        durationSeconds: duration,
+        filamentMeters: job.filamentLength != null ? job.filamentLength! / 1000 : null,
+        filamentGrams: job.filamentWeight,
+        status: 'completed',
+      );
+    }).toList();
+
+    await savePrintHistory(seeded);
   }
 }

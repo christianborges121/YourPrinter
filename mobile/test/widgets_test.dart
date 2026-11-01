@@ -304,6 +304,49 @@ void main() {
       expect(find.text('gear_bearing_v2.gcode'), findsOneWidget);
       expect(find.text('68.5%'), findsOneWidget);
       expect(find.text('Layer 250 / 365'), findsOneWidget);
+      expect(find.byKey(const Key('job_speed_quick_bar')), findsOneWidget);
+      expect(find.byKey(const Key('job_speed_preset_50')), findsOneWidget);
+      expect(find.byKey(const Key('job_speed_preset_100')), findsOneWidget);
+      expect(find.byKey(const Key('job_speed_preset_140')), findsOneWidget);
+      expect(find.text('Elapsed'), findsOneWidget);
+    });
+
+    testWidgets('JobProgressCard tapping speed preset dispatches setPrintSpeed', (WidgetTester tester) async {
+      final mockService = MockPrinterService();
+      const mockStatus = PrinterStatusData(
+        printerState: 'PRINTING',
+        progress: 50.0,
+        currentLayer: 10,
+        totalLayers: 20,
+        jobName: 'test.gcode',
+        nozzleTemperature: 210.0,
+        nozzleTargetTemperature: 210.0,
+        bedTemperature: 60.0,
+        bedTargetTemperature: 60.0,
+        printSpeed: 100.0,
+        estimatedLength: 2500,
+        estimatedWeight: 8,
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            preferencesServiceProvider.overrideWithValue(testPrefs),
+            printerServiceProvider.overrideWithValue(mockService),
+            telemetryProvider.overrideWith((ref) => TestTelemetryNotifier(const TelemetryState(isLoading: false, status: mockStatus))),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: JobProgressCard(),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('2.5m (8g)'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('job_speed_preset_140')));
+      await tester.pump();
+      expect(mockService.lastSpeedSet, 140);
     });
 
     testWidgets('ConnectionErrorCard displays generic friendly message and expands to show true message', (WidgetTester tester) async {

@@ -11,6 +11,7 @@ import '../../state/telemetry_provider.dart';
 import '../common/not_configured_view.dart';
 import '../common/status_badge.dart';
 import '../controls/control_panel_card.dart';
+import '../controls/device_info_sheet.dart';
 import '../controls/watchdog_sheet.dart';
 import 'ams_spool_card.dart';
 import 'camera_panel.dart';
@@ -192,6 +193,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     builder: (_) => const WatchdogSheet(),
                   );
                 },
+              );
+            },
+          ),
+          // Device Information button
+          IconButton(
+            icon: const Icon(LucideIcons.info, size: 20, color: AppColors.textPrimary),
+            tooltip: 'Device Information',
+            onPressed: () {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => const DeviceInfoSheet(),
               );
             },
           ),
