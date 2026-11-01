@@ -43,6 +43,7 @@ export interface PrinterStatusData {
   coolingFanSpeed?: number;
   chamberFanSpeed?: number;
   fanSpeed?: number;
+  printSpeed?: number;
   toolTemps?: number[];
   toolTargetTemps?: number[];
   progress: number;

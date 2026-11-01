@@ -624,6 +624,14 @@ export class WebSocketManager extends EventEmitter {
       coolingFanSpeed: typeof coolingFanSpeed === 'number' ? Math.round(coolingFanSpeed) : undefined,
       chamberFanSpeed: typeof chamberFanSpeed === 'number' ? Math.round(chamberFanSpeed) : undefined,
       fanSpeed: typeof coolingFanSpeed === 'number' ? Math.round(coolingFanSpeed) : undefined,
+      printSpeed:
+        typeof (rawBackend as { printSpeed?: number })?.printSpeed === 'number'
+          ? (rawBackend as { printSpeed?: number }).printSpeed
+          : typeof (rawBackend as { currentPrintSpeed?: number })?.currentPrintSpeed === 'number'
+          ? (rawBackend as { currentPrintSpeed?: number }).currentPrintSpeed
+          : typeof (rawBackend as { speed?: number })?.speed === 'number'
+          ? (rawBackend as { speed?: number }).speed
+          : 100,
       // Progress from currentJob if available (100% when completed)
       progress: effectiveProgress,
       currentLayer: effectiveCurrentLayer,

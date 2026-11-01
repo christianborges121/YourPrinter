@@ -240,6 +240,14 @@ class ApiClient {
     });
   }
 
+  // Print Speed Rate Control
+  async setPrintSpeed(speedPercent: number, contextId?: string): Promise<{ success: boolean; message?: string }> {
+    return this.request('/api/printer/control/speed', {
+      method: 'POST',
+      body: JSON.stringify({ speed: speedPercent, contextId }),
+    });
+  }
+
   // Files & Jobs
   async getRecentJobs(contextId?: string): Promise<{ success: boolean; files: WebUIJobFile[] }> {
     return this.request('/api/jobs/recent', {}, { contextId });

@@ -356,6 +356,20 @@ export class BambuMqttClient extends EventEmitter {
   }
 
   /**
+   * Set Bambu print speed level (1=Silent 50%, 2=Standard 100%, 3=Sport 140%, 4=Ludicrous 166%)
+   */
+  public async setPrintSpeed(level: 1 | 2 | 3 | 4): Promise<void> {
+    const seq = String(this.sequenceId++);
+    await this.publish({
+      print: {
+        sequence_id: seq,
+        command: 'print_speed',
+        param: String(level),
+      },
+    });
+  }
+
+  /**
    * Start a print job from an uploaded .3mf or .gcode file
    */
   public async startProjectFile(

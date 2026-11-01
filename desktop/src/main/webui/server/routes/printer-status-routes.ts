@@ -135,6 +135,11 @@ export function registerPrinterStatusRoutes(router: Router, deps: RouteDependenc
           ledState: (rawStatus.ledState as boolean | undefined),
           coolingFanSpeed: (rawStatus.coolingFanSpeed as number | undefined),
           chamberFanSpeed: (rawStatus.chamberFanSpeed as number | undefined),
+          printSpeed:
+            (rawStatus.printSpeed as number | undefined) ??
+            (rawStatus.currentPrintSpeed as number | undefined) ??
+            (rawStatus.speed as number | undefined) ??
+            100,
           toolTemps,
           toolTargetTemps,
           progress: normProgress,

@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Sliders, Move, Home, Lightbulb, Wind, Fan, Thermometer } from 'lucide-react';
+import { Sliders, Move, Home, Lightbulb, Wind, Fan, Thermometer, Gauge } from 'lucide-react';
 import { usePrinter } from '../../context/PrinterContext';
 import { JogModal } from '../modals/JogModal';
 
 export const ControlPanelCard: React.FC = () => {
-  const { status, features, capabilities, activeContext, homeAxes, setLed, setFiltration, setCoolingFanSpeed } = usePrinter();
+  const { status, features, capabilities, activeContext, homeAxes, setLed, setFiltration, setCoolingFanSpeed, setPrintSpeed } = usePrinter();
   const [jogModalOpen, setJogModalOpen] = useState(false);
   const [ledState, setLedState] = useState(true);
   const [isHoming, setIsHoming] = useState(false);
   const [fanSpeed, setFanSpeed] = useState<number>(0);
+  const [currentSpeed, setCurrentSpeed] = useState<number>(100);
   const [selectedFiltration, setSelectedFiltration] = useState<'off' | 'internal' | 'external' | null>(null);
 
   const stateStr = status?.printerState || '';
@@ -53,6 +54,18 @@ export const ControlPanelCard: React.FC = () => {
       setLedState(status.ledState);
     }
   }, [status?.ledState]);
+
+  // Sync print speed if provided in telemetry
+  useEffect(() => {
+    if (typeof status?.printSpeed === 'number' && status.printSpeed > 0) {
+      setCurrentSpeed(Math.round(status.printSpeed));
+    }
+  }, [status?.printSpeed]);
+
+  const handleSpeedChange = async (target: number) => {
+    setCurrentSpeed(target);
+    await setPrintSpeed(target);
+  };
 
   const handleToggleLed = async () => {
     const next = !ledState;
@@ -176,6 +189,47 @@ export const ControlPanelCard: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* Print Speed Rate Control */}
+      <div className="flex flex-col gap-2.5 p-3 rounded-lg bg-[#262626]/60 border border-[#2E2E2E]">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-[#F3F4F6] flex items-center gap-1.5">
+            <Gauge size={15} className="text-[#F59E0B]" />
+            Print Speed Rate
+          </span>
+          <span className="text-[11px] font-mono font-bold text-[#F59E0B]">
+            {currentSpeed}%
+            <span className="text-[10px] text-[#94A3B8] font-normal ml-1">
+              {currentSpeed <= 70 ? '(Quiet)' : currentSpeed <= 120 ? '(Standard)' : '(Sport)'}
+            </span>
+          </span>
+        </div>
+
+        {/* Speed Preset Chips: 50% Quiet, 100% Standard, 140% Sport */}
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { percent: 50, label: 'Quiet', desc: '50% Speed' },
+            { percent: 100, label: 'Standard', desc: '100% Speed' },
+            { percent: 140, label: 'Sport', desc: '140% Speed' },
+          ].map(({ percent, label, desc }) => {
+            const isSelected = Math.abs(currentSpeed - percent) < 10;
+            return (
+              <button
+                key={percent}
+                onClick={() => handleSpeedChange(percent)}
+                className={`flex flex-col items-center py-2 px-2 rounded-lg border transition-all ${
+                  isSelected
+                    ? 'bg-[#F59E0B]/20 border-[#F59E0B] text-[#F59E0B] shadow-sm'
+                    : 'bg-[#1E1E1E] border-[#2E2E2E] text-[#D1D5DB] hover:text-[#F3F4F6] hover:border-[#383838]'
+                }`}
+              >
+                <span className="text-xs font-semibold">{label}</span>
+                <span className="text-[10px] text-[#94A3B8] mt-0.5">{desc}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Air Filtration Fan */}
       {hasFiltration && (

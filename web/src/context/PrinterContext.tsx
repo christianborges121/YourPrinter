@@ -47,6 +47,7 @@ interface PrinterContextType {
   setChamberTemp: (temp: number) => Promise<boolean>;
   setFiltration: (mode: 'off' | 'internal' | 'external') => Promise<boolean>;
   setCoolingFanSpeed: (percent: number) => boolean | Promise<boolean>;
+  setPrintSpeed: (speedPercent: number) => Promise<boolean>;
   loadSlot: (slotId: number) => Promise<boolean>;
   unloadMaterial: () => Promise<boolean>;
   updateWatchdog: (config: {
@@ -280,6 +281,11 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
           ? stabilized.chamberTargetTemperature
           : prevStatus?.chamberTargetTemperature;
 
+      const currentSpeed =
+        stabilized.printSpeed !== undefined && stabilized.printSpeed > 0
+          ? stabilized.printSpeed
+          : prevStatus?.printSpeed || 100;
+
       return {
         ...prevStatus,
         ...stabilized,
@@ -290,6 +296,7 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
         filtrationMode: filtration,
         chamberTemperature: chamberTemp,
         chamberTargetTemperature: chamberTargetTemp,
+        printSpeed: currentSpeed,
       };
     });
   }, []);
@@ -606,6 +613,24 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
     [activeContextId, refreshStatus]
   );
 
+  const setPrintSpeed = useCallback(
+    async (speed: number) => {
+      const clamped = Math.max(10, Math.min(300, Math.round(speed)));
+      setStatus((prev) => (prev ? { ...prev, printSpeed: clamped } : prev));
+      try {
+        const res = await api.setPrintSpeed(clamped, activeContextId || undefined);
+        if (res.success) {
+          await refreshStatus();
+          return true;
+        }
+      } catch {
+        // Fallback to WebSocket G-code M220 for legacy printers
+      }
+      return wsClient.executeGcode(`M220 S${clamped}`);
+    },
+    [activeContextId, refreshStatus]
+  );
+
   const loadSlot = useCallback(
     async (slotId: number) => {
       const res = await api.loadMaterialSlot(slotId, activeContextId || undefined);
@@ -717,6 +742,7 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setChamberTemp,
         setFiltration,
         setCoolingFanSpeed,
+        setPrintSpeed,
         loadSlot,
         unloadMaterial,
         updateWatchdog,

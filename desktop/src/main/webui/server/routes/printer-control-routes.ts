@@ -120,6 +120,54 @@ export function registerPrinterControlRoutes(router: Router, deps: RouteDependen
     }
   });
 
+  router.post('/printer/control/speed', async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const contextResult = resolveContext(req, deps, {
+        requireBackendReady: true,
+        requireBackendInstance: true,
+      });
+      if (!contextResult.success) {
+        return sendErrorResponse<StandardAPIResponse>(res, contextResult.statusCode, contextResult.error);
+      }
+
+      const { contextId, backend } = contextResult;
+      if (!backend) {
+        return sendErrorResponse<StandardAPIResponse>(res, 503, 'Backend not available');
+      }
+
+      const body = (req.body || {}) as { speed?: number; percent?: number };
+      const speedPercent = body.speed !== undefined ? body.speed : body.percent;
+
+      if (typeof speedPercent !== 'number' || speedPercent < 10 || speedPercent > 300) {
+        return sendErrorResponse<StandardAPIResponse>(res, 400, 'Speed must be a number between 10 and 300%');
+      }
+
+      const targetSpeed = Math.round(speedPercent);
+      let success = false;
+
+      // 1. DualAPI / FlashForge HTTP OrcaServer backend (Creator 5 / AD5M)
+      if (typeof (backend as any).sendHttpSpeedCommand === 'function') {
+        success = await (backend as any).sendHttpSpeedCommand(targetSpeed);
+      } else if (typeof (backend as any).setPrintSpeed === 'function') {
+        // 2. Bambu Lab backend (maps 50 -> Silent, 100 -> Standard, 140 -> Sport, 166 -> Ludicrous)
+        success = await (backend as any).setPrintSpeed(targetSpeed);
+      } else {
+        // 3. Fallback to RepRap / Marlin G-code M220 S<percentage>
+        const gcodeRes = await deps.backendManager.executeGCodeCommand(contextId, `~M220 S${targetSpeed}`);
+        success = gcodeRes.success;
+      }
+
+      const response: StandardAPIResponse = {
+        success,
+        message: success ? `Print speed set to ${targetSpeed}%` : 'Failed to update print speed',
+      };
+      return res.status(success ? 200 : 500).json(response);
+    } catch (error) {
+      const appError = toAppError(error);
+      return sendErrorResponse<StandardAPIResponse>(res, 500, appError.message);
+    }
+  });
+
   router.post('/printer/control/clear-status', async (req: AuthenticatedRequest, res: Response) => {
     try {
       const contextResult = resolveContext(req, deps, {

@@ -377,6 +377,20 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
           };
         }
 
+        // Handle M220 (feedrate percentage / print speed) via HTTP printerCtl_cmd
+        const speedMatch = command.match(/M220\s+S(\d+)/i);
+        if (speedMatch) {
+          const speedVal = parseInt(speedMatch[1], 10);
+          const ok = await this.sendHttpSpeedCommand(speedVal);
+          return {
+            success: ok,
+            command,
+            response: ok ? 'ok' : 'error',
+            executionTime: Date.now() - startTime,
+            timestamp: new Date(),
+          };
+        }
+
         throw new Error('Legacy TCP API is not available for this printer');
       }
 
@@ -1631,6 +1645,78 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
       return data?.code === 0;
     } catch (err) {
       console.warn('[DualAPIBackend] Failed to send HTTP fan command:', err);
+      return false;
+    }
+  }
+
+  /**
+   * Send HTTP speed command for HTTP-only printers (Creator 5 / 5 Pro / AD5M)
+   * Sends printerCtl_cmd with print speed percentage (e.g. 50, 100, 140)
+   */
+  public async sendHttpSpeedCommand(speedPercent: number): Promise<boolean> {
+    try {
+      const details = this.printerDetails as Record<string, any> | undefined;
+      const serialNumber =
+        this.serialNumber ||
+        details?.SerialNumber ||
+        details?.serialNumber ||
+        (this.fiveMClient as unknown as { serialNumber?: string })?.serialNumber ||
+        '';
+      const checkCode =
+        this.checkCode ||
+        details?.CheckCode ||
+        details?.checkCode ||
+        (this.fiveMClient as unknown as { checkCode?: string })?.checkCode ||
+        '';
+      const ip =
+        this.ipAddress ||
+        details?.IPAddress ||
+        details?.ipAddress ||
+        '';
+
+      if (!ip) return false;
+
+      const currentDetail = (this.lastTelemetryData?.rawStatus as Record<string, any>) || {};
+      const coolingFan = currentDetail.coolingFanSpeed ?? 0;
+      const chamberFan = currentDetail.chamberFanSpeed ?? 0;
+      const zAxisCompensation = currentDetail.zAxisCompensation ?? 0;
+
+      const res = await fetch(`http://${ip}:8898/control`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          serialNumber,
+          checkCode,
+          payload: {
+            cmd: 'printerCtl_cmd',
+            args: {
+              coolingFan,
+              coolingLeftFan: 0,
+              chamberFan,
+              speed: speedPercent,
+              zAxisCompensation,
+            },
+          },
+        }),
+        signal: AbortSignal.timeout(4000),
+      });
+
+      if (!res.ok) {
+        console.warn(`[DualAPIBackend] printerCtl_cmd speed failed with HTTP ${res.status}`);
+        return false;
+      }
+
+      const data = (await res.json()) as { code?: number };
+      if (data?.code === 0) {
+        if (this.lastTelemetryData?.rawStatus) {
+          (this.lastTelemetryData.rawStatus as Record<string, any>).currentPrintSpeed = speedPercent;
+          (this.lastTelemetryData.rawStatus as Record<string, any>).speed = speedPercent;
+        }
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.warn('[DualAPIBackend] Failed to send HTTP speed command:', err);
       return false;
     }
   }

@@ -106,12 +106,14 @@ export interface PrinterStatusData {
   nozzleTargetTemperature: number;
   chamberTemperature?: number;
   chamberTargetTemperature?: number;
+  printSpeed?: number;
   toolTemps?: number[];
   toolTargetTemps?: number[];
   ledState?: boolean;
   coolingFanSpeed?: number;
   chamberFanSpeed?: number;
   fanSpeed?: number;
+  printSpeed?: number;
   progress: number;
   currentLayer?: number;
   totalLayers?: number;
@@ -165,6 +167,7 @@ export interface PrinterStatus {
   nozzleTargetTemperature: number;
   chamberTemperature?: number;
   chamberTargetTemperature?: number;
+  printSpeed?: number;
   toolTemps?: number[];
   toolTargetTemps?: number[];
   progress: number;

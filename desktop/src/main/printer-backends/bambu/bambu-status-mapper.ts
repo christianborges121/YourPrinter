@@ -114,6 +114,22 @@ export function mapBambuStateToPrinterStatus(state: Record<string, unknown> | nu
       isLightOn = chamberLight?.mode === 'on';
     }
 
+    // Extract Bambu print speed magnitude or level
+    const spdMag = typeof s.spd_mag === 'number' ? s.spd_mag : undefined;
+    const spdLvl = typeof s.spd_lvl === 'number' ? s.spd_lvl : undefined;
+    const printSpeed =
+      spdMag !== undefined
+        ? spdMag
+        : spdLvl === 1
+        ? 50
+        : spdLvl === 2
+        ? 100
+        : spdLvl === 3
+        ? 140
+        : spdLvl === 4
+        ? 166
+        : 100;
+
     const statusObject = {
       printerState,
       nozzleTemperature: nozzleTemp,
@@ -129,6 +145,7 @@ export function mapBambuStateToPrinterStatus(state: Record<string, unknown> | nu
       toolTargetTemps: [nozzleTarget],
       bedTargetTemp: bedTarget,
       isLightOn,
+      printSpeed,
     };
 
     return {

@@ -415,6 +415,29 @@ export class BambuA1MiniBackend extends BasePrinterBackend {
   }
 
   /**
+   * Set Bambu print speed (50% Silent, 100% Standard, 140% Sport, 166% Ludicrous)
+   */
+  public async setPrintSpeed(speedPercent: number): Promise<boolean> {
+    try {
+      let level: 1 | 2 | 3 | 4 = 2;
+      if (speedPercent <= 70) {
+        level = 1; // 50% Silent
+      } else if (speedPercent <= 120) {
+        level = 2; // 100% Standard
+      } else if (speedPercent <= 150) {
+        level = 3; // 140% Sport
+      } else {
+        level = 4; // 166% Ludicrous
+      }
+      await this.mqttClient?.setPrintSpeed(level);
+      return true;
+    } catch (error) {
+      console.warn('[BambuA1MiniBackend] Failed to set print speed:', error);
+      return false;
+    }
+  }
+
+  /**
    * Filament load command for AMS Lite
    */
   public async loadAmsSlot(slotId: number, temp = 220): Promise<CommandResult> {
