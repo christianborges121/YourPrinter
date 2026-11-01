@@ -59,6 +59,35 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
     cachedAt: Date;
   } | null = null;
 
+  /**
+   * Cache for last active print job telemetry while printing to guard against
+   * transient firmware drops and intermittent null/empty job fields.
+   */
+  private lastActiveJobCache: {
+    jobName: string;
+    progress: number;
+    currentLayer?: number;
+    totalLayers?: number;
+    estimatedTime?: number;
+    remainingTime?: number;
+    printDuration?: number;
+    printEta?: string;
+    lastSeen: number;
+  } | null = null;
+
+  /**
+   * Hysteresis counter for non-printing status transitions to prevent flickers
+   */
+  private consecutiveNonPrintingPolls = 0;
+  private static readonly NON_PRINTING_GRACE_POLLS = 3;
+
+  /**
+   * Cache and retry counter for transient polling errors
+   */
+  private lastValidStatusResult: StatusResult | null = null;
+  private consecutivePollErrors = 0;
+  private static readonly MAX_TRANSIENT_POLL_ERRORS = 3;
+
   constructor(options: BackendInitOptions) {
     super(options);
     this.initializeClients();
@@ -402,13 +431,13 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
         (raw.estimatedTime as number) ??
         (raw.EstimatedTime as number) ??
         0;
-      const elapsedTimeSeconds =
+      let elapsedTimeSeconds =
         machineInfo?.PrintDuration ??
         (raw.printDuration as number) ??
         (raw.PrintDuration as number) ??
         0;
-      const remainingTimeSeconds = rawEstimatedSeconds > 0 ? rawEstimatedSeconds : 0;
-      const totalEstimatedSeconds = elapsedTimeSeconds + remainingTimeSeconds;
+      let remainingTimeSeconds = rawEstimatedSeconds > 0 ? rawEstimatedSeconds : 0;
+      let totalEstimatedSeconds = elapsedTimeSeconds + remainingTimeSeconds;
 
       // Extract current filament usage values
       const estimatedRightLen =
@@ -421,50 +450,14 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
         (raw.estWeight as number) ??
         (raw.estimatedRightWeight as number) ??
         0;
-      const currentJob =
+      const rawJob =
         machineInfo?.PrintFileName ??
         (raw.printFileName as string) ??
         (raw.fileName as string) ??
         (raw.currentFile as string) ??
         undefined;
-
-      // Cache filament usage while actively printing
-      if (
-        (status === 'printing' || status === 'paused') &&
-        currentJob &&
-        (estimatedRightLen > 0 || estimatedRightWeight > 0)
-      ) {
-        this.lastFilamentUsageCache = {
-          estimatedRightLen,
-          estimatedRightWeight,
-          currentJob,
-          cachedAt: new Date(),
-        };
-      }
-
-      // Use cached values when print is completed
-      let finalEstimatedRightLen = estimatedRightLen;
-      let finalEstimatedRightWeight = estimatedRightWeight;
-
-      if (status === 'completed' && this.lastFilamentUsageCache) {
-        // Verify cache matches current job
-        if (this.lastFilamentUsageCache.currentJob === currentJob) {
-          finalEstimatedRightLen = this.lastFilamentUsageCache.estimatedRightLen;
-          finalEstimatedRightWeight = this.lastFilamentUsageCache.estimatedRightWeight;
-          console.log(
-            `[DualAPIBackend] Using cached filament usage for completed print: ${finalEstimatedRightWeight}g, ${finalEstimatedRightLen}mm`
-          );
-        }
-      }
-
-      // Clear cache when returning to ready or new print starts
-      if (
-        status === 'ready' ||
-        (status === 'printing' && currentJob && this.lastFilamentUsageCache?.currentJob !== currentJob)
-      ) {
-        console.log('[DualAPIBackend] Clearing filament usage cache');
-        this.lastFilamentUsageCache = null;
-      }
+      let effectiveJob: string | undefined =
+        typeof rawJob === 'string' && rawJob.trim().length > 0 ? rawJob.trim() : undefined;
 
       // For multi-nozzle models (e.g. Creator 5 Pro with 4 tool heads), find active tool & extract multi-tool temps
       let activeNozzle = machineInfo?.Extruder;
@@ -611,14 +604,14 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
         progressVal = progressVal * 100;
       }
 
-      const currentLayerVal =
+      let currentLayerVal =
         machineInfo?.CurrentPrintLayer ??
         (raw.currentLayer as number) ??
         (raw.currentPrintLayer as number) ??
         (raw.layer as number) ??
         undefined;
 
-      const totalLayersVal =
+      let totalLayersVal =
         machineInfo?.TotalPrintLayers ??
         (raw.totalLayers as number) ??
         (raw.totalPrintLayers as number) ??
@@ -636,14 +629,135 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
         progressVal = currentLayerVal > 0 ? Math.round((currentLayerVal / totalLayersVal) * 100) : 0;
       }
 
-      const printEtaVal =
+      let printEtaVal =
         machineInfo?.PrintEta ??
         (raw.printEta as string) ??
         (raw.eta as string) ??
         undefined;
 
+      const statusStr = (status || '').toLowerCase();
+      const isPrintingOrPaused = statusStr === 'printing' || statusStr === 'paused';
+      let effectiveStatus = status;
+
+      // Active job smoothing & hysteresis to eliminate flickering on Creator 5 Pro & dual API printers
+      if (isPrintingOrPaused) {
+        this.consecutiveNonPrintingPolls = 0;
+
+        // If firmware omitted PrintFileName during an active print, recover from cache
+        if (!effectiveJob && this.lastActiveJobCache && Date.now() - this.lastActiveJobCache.lastSeen < 120_000) {
+          console.log(
+            `[DualAPIBackend] Recovering active job "${this.lastActiveJobCache.jobName}" from cache (firmware omitted PrintFileName)`
+          );
+          effectiveJob = this.lastActiveJobCache.jobName;
+          if (progressVal === 0 && this.lastActiveJobCache.progress > 0) {
+            progressVal = this.lastActiveJobCache.progress;
+          }
+          if (currentLayerVal === undefined) {
+            currentLayerVal = this.lastActiveJobCache.currentLayer;
+          }
+          if (totalLayersVal === undefined) {
+            totalLayersVal = this.lastActiveJobCache.totalLayers;
+          }
+          if (remainingTimeSeconds === 0 && this.lastActiveJobCache.remainingTime) {
+            remainingTimeSeconds = this.lastActiveJobCache.remainingTime * 60;
+          }
+          if (elapsedTimeSeconds === 0 && this.lastActiveJobCache.printDuration) {
+            elapsedTimeSeconds = this.lastActiveJobCache.printDuration;
+          }
+          if (!printEtaVal && this.lastActiveJobCache.printEta) {
+            printEtaVal = this.lastActiveJobCache.printEta;
+          }
+        } else if (effectiveJob) {
+          // Fresh telemetry available: update active job cache
+          this.lastActiveJobCache = {
+            jobName: effectiveJob,
+            progress: progressVal,
+            currentLayer: currentLayerVal,
+            totalLayers: totalLayersVal,
+            estimatedTime: totalEstimatedSeconds > 0 ? Math.round(totalEstimatedSeconds / 60) : undefined,
+            remainingTime: remainingTimeSeconds > 0 ? Math.round(remainingTimeSeconds / 60) : undefined,
+            printDuration: elapsedTimeSeconds,
+            printEta: printEtaVal,
+            lastSeen: Date.now(),
+          };
+        }
+      } else if (
+        !isCompleted &&
+        this.lastActiveJobCache &&
+        Date.now() - this.lastActiveJobCache.lastSeen < 30_000 &&
+        this.lastActiveJobCache.progress < 99
+      ) {
+        // Printer transiently returned ready/idle/unknown mid-print:
+        // Debounce for up to 3 polls to prevent single-second UI drops mid-print
+        this.consecutiveNonPrintingPolls++;
+        if (this.consecutiveNonPrintingPolls < DualAPIBackend.NON_PRINTING_GRACE_POLLS) {
+          console.warn(
+            `[DualAPIBackend] Transient non-printing status "${status}" during active print (poll ${this.consecutiveNonPrintingPolls}/${DualAPIBackend.NON_PRINTING_GRACE_POLLS}). Retaining printing state.`
+          );
+          effectiveStatus = 'printing';
+          effectiveJob = this.lastActiveJobCache.jobName;
+          if (progressVal === 0) progressVal = this.lastActiveJobCache.progress;
+          if (currentLayerVal === undefined) currentLayerVal = this.lastActiveJobCache.currentLayer;
+          if (totalLayersVal === undefined) totalLayersVal = this.lastActiveJobCache.totalLayers;
+          if (remainingTimeSeconds === 0 && this.lastActiveJobCache.remainingTime) {
+            remainingTimeSeconds = this.lastActiveJobCache.remainingTime * 60;
+          }
+          if (elapsedTimeSeconds === 0 && this.lastActiveJobCache.printDuration) {
+            elapsedTimeSeconds = this.lastActiveJobCache.printDuration;
+          }
+          if (!printEtaVal && this.lastActiveJobCache.printEta) {
+            printEtaVal = this.lastActiveJobCache.printEta;
+          }
+        } else {
+          // Non-printing status confirmed after grace polls
+          this.lastActiveJobCache = null;
+        }
+      } else {
+        this.consecutiveNonPrintingPolls = 0;
+        if (statusStr === 'ready' || statusStr === 'idle' || statusStr === 'cancelled') {
+          this.lastActiveJobCache = null;
+        }
+      }
+
+      // Cache filament usage while actively printing
+      if (
+        (effectiveStatus === 'printing' || effectiveStatus === 'paused') &&
+        effectiveJob &&
+        (estimatedRightLen > 0 || estimatedRightWeight > 0)
+      ) {
+        this.lastFilamentUsageCache = {
+          estimatedRightLen,
+          estimatedRightWeight,
+          currentJob: effectiveJob,
+          cachedAt: new Date(),
+        };
+      }
+
+      // Use cached values when print is completed
+      let finalEstimatedRightLen = estimatedRightLen;
+      let finalEstimatedRightWeight = estimatedRightWeight;
+
+      if (isCompleted && this.lastFilamentUsageCache) {
+        if (!effectiveJob || this.lastFilamentUsageCache.currentJob === effectiveJob) {
+          finalEstimatedRightLen = this.lastFilamentUsageCache.estimatedRightLen;
+          finalEstimatedRightWeight = this.lastFilamentUsageCache.estimatedRightWeight;
+          console.log(
+            `[DualAPIBackend] Using cached filament usage for completed print: ${finalEstimatedRightWeight}g, ${finalEstimatedRightLen}mm`
+          );
+        }
+      }
+
+      // Clear filament usage cache when returning to ready or new print starts
+      if (
+        statusStr === 'ready' ||
+        (statusStr === 'printing' && effectiveJob && this.lastFilamentUsageCache?.currentJob !== effectiveJob)
+      ) {
+        console.log('[DualAPIBackend] Clearing filament usage cache');
+        this.lastFilamentUsageCache = null;
+      }
+
       const printerStatus = {
-        printerState: status,
+        printerState: effectiveStatus || status,
         bedTemperature: bedCurrent,
         bedTargetTemperature: bedSet,
         nozzleTemperature: activeNozzleTemp,
@@ -654,7 +768,7 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
         toolTargetTemps: extractedToolTargets,
         nozzleCnt: (raw.nozzleCnt as number) ?? (extractedToolTemps.length || 1),
         progress: progressVal,
-        currentJob: currentJob || undefined,
+        currentJob: effectiveJob || undefined,
         estimatedTime: totalEstimatedSeconds > 0 ? Math.round(totalEstimatedSeconds / 60) : undefined,
         remainingTime: remainingTimeSeconds > 0 ? Math.round(remainingTimeSeconds / 60) : undefined,
         printDuration: elapsedTimeSeconds,
@@ -705,13 +819,28 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
         ...this.getAdditionalStatusFields(machineInfo),
       };
 
-      return {
+      const result: StatusResult = {
         success: true,
         status: printerStatus,
         timestamp: new Date(),
       };
+      this.lastValidStatusResult = result;
+      this.consecutivePollErrors = 0;
+      return result;
     } catch (error) {
-      // Fallback to legacy API if new API fails
+      this.consecutivePollErrors++;
+      if (this.lastValidStatusResult && this.consecutivePollErrors <= DualAPIBackend.MAX_TRANSIENT_POLL_ERRORS) {
+        console.warn(
+          `[DualAPIBackend] Transient HTTP polling error (attempt ${this.consecutivePollErrors}/${DualAPIBackend.MAX_TRANSIENT_POLL_ERRORS}), using cached status:`,
+          error
+        );
+        return {
+          ...this.lastValidStatusResult,
+          timestamp: new Date(),
+        };
+      }
+      this.lastValidStatusResult = null;
+      // Fallback to legacy API if new API fails and transient error threshold exceeded
       return this.getPrinterStatusLegacy(error);
     }
   }

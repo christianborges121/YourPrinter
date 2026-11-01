@@ -61,6 +61,8 @@ const PRINTER_STATE_MAP: Record<string, PrinterStatus['state']> = {
  * Service for transforming printer data from various backend formats
  */
 export class PrinterDataTransformer {
+  private lastActiveJobName = '';
+
   /**
    * Transform backend printer status to UI format
    */
@@ -82,7 +84,13 @@ export class PrinterDataTransformer {
     const chamberTarget = safeExtractNumber(backendData, 'chamberTargetTemperature', 0);
 
     // Extract current job info
-    const currentJobName = safeExtractString(backendData, 'currentJob', '');
+    let currentJobName = safeExtractString(backendData, 'currentJob', '');
+    if (!currentJobName) {
+      currentJobName =
+        safeExtractString(backendData, 'printFileName', '') ||
+        safeExtractString(backendData, 'fileName', '') ||
+        safeExtractString(backendData, 'currentFile', '');
+    }
     const currentJob = this.extractCurrentJob(backendData, state, currentJobName);
 
     // Extract additional info
@@ -204,9 +212,20 @@ export class PrinterDataTransformer {
     printerState: PrinterStatus['state'],
     fileName: string
   ): CurrentJobInfo {
+    let effectiveFileName = fileName;
+    if (['Printing', 'Paused'].includes(printerState)) {
+      if (hasValue(effectiveFileName)) {
+        this.lastActiveJobName = effectiveFileName;
+      } else if (this.lastActiveJobName) {
+        effectiveFileName = this.lastActiveJobName;
+      }
+    } else if (printerState === 'Ready' || printerState === 'Cancelled') {
+      this.lastActiveJobName = '';
+    }
+
     // Preserve job information during 'Completed' state for notifications
-    const shouldPreserveJob = ['Printing', 'Paused', 'Completed'].includes(printerState) && hasValue(fileName);
-    const isActive = ['Printing', 'Paused'].includes(printerState) && hasValue(fileName);
+    const shouldPreserveJob = ['Printing', 'Paused', 'Completed'].includes(printerState) && hasValue(effectiveFileName);
+    const isActive = ['Printing', 'Paused'].includes(printerState) && hasValue(effectiveFileName);
 
     if (!shouldPreserveJob) {
       return {
@@ -302,7 +321,7 @@ export class PrinterDataTransformer {
         totalLayers: progressData.totalLayers,
       })
     ) {
-      console.warn(`[DataTransformer] Invalid progress data for job: ${fileName}`);
+      console.warn(`[DataTransformer] Invalid progress data for job: ${effectiveFileName}`);
       // Use safe defaults for invalid data
       progressData.percentage = 0;
       progressData.currentLayer = null;
@@ -310,8 +329,8 @@ export class PrinterDataTransformer {
     }
 
     return {
-      fileName,
-      displayName: fileName,
+      fileName: effectiveFileName,
+      displayName: effectiveFileName,
       startTime,
       progress: progressData,
       isActive,

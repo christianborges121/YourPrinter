@@ -153,6 +153,102 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [disabledPrinterIds, visibleContexts, activeContextId]);
 
+  // Active print job state stabilizer: guards against transient null jobName or 0 progress
+  const activeJobCacheRef = useRef<{
+    jobName: string;
+    progress: number;
+    currentLayer?: number;
+    totalLayers?: number;
+    timeRemaining?: number;
+    timeElapsed?: number;
+    formattedEta?: string;
+    elapsedTimeSeconds?: number;
+    estimatedLength?: number;
+    estimatedWeight?: number;
+    lastSeen: number;
+    transientGraceCount: number;
+  } | null>(null);
+
+  const applyStatusWithStabilization = useCallback((rawIncoming: PrinterStatusData) => {
+    let normProg = rawIncoming.progress;
+    if (typeof normProg === 'number' && normProg > 0 && normProg <= 1.0) {
+      normProg = normProg * 100;
+    }
+
+    let stabilized: PrinterStatusData = { ...rawIncoming, progress: normProg };
+    const stateStr = (stabilized.printerState || '').toLowerCase();
+    const isPrintingOrPaused = /print|pause|busy|running/i.test(stateStr);
+    const isCompleted = /complet|finish|done/i.test(stateStr);
+
+    if (isPrintingOrPaused && stabilized.jobName) {
+      activeJobCacheRef.current = {
+        jobName: stabilized.jobName,
+        progress: stabilized.progress,
+        currentLayer: stabilized.currentLayer,
+        totalLayers: stabilized.totalLayers,
+        timeRemaining: stabilized.timeRemaining,
+        timeElapsed: stabilized.timeElapsed,
+        formattedEta: stabilized.formattedEta,
+        elapsedTimeSeconds: stabilized.elapsedTimeSeconds,
+        estimatedLength: stabilized.estimatedLength,
+        estimatedWeight: stabilized.estimatedWeight,
+        lastSeen: Date.now(),
+        transientGraceCount: 0,
+      };
+    } else if (
+      isPrintingOrPaused &&
+      !stabilized.jobName &&
+      activeJobCacheRef.current &&
+      Date.now() - activeJobCacheRef.current.lastSeen < 60_000
+    ) {
+      // Retain active job telemetry during transient null dropout
+      stabilized = {
+        ...stabilized,
+        jobName: activeJobCacheRef.current.jobName,
+        progress: stabilized.progress > 0 ? stabilized.progress : activeJobCacheRef.current.progress,
+        currentLayer: stabilized.currentLayer ?? activeJobCacheRef.current.currentLayer,
+        totalLayers: stabilized.totalLayers ?? activeJobCacheRef.current.totalLayers,
+        timeRemaining: stabilized.timeRemaining ?? activeJobCacheRef.current.timeRemaining,
+        timeElapsed: stabilized.timeElapsed ?? activeJobCacheRef.current.timeElapsed,
+        formattedEta: stabilized.formattedEta ?? activeJobCacheRef.current.formattedEta,
+        elapsedTimeSeconds: stabilized.elapsedTimeSeconds ?? activeJobCacheRef.current.elapsedTimeSeconds,
+        estimatedLength: stabilized.estimatedLength ?? activeJobCacheRef.current.estimatedLength,
+        estimatedWeight: stabilized.estimatedWeight ?? activeJobCacheRef.current.estimatedWeight,
+      };
+    } else if (
+      !isPrintingOrPaused &&
+      !isCompleted &&
+      activeJobCacheRef.current &&
+      Date.now() - activeJobCacheRef.current.lastSeen < 15_000 &&
+      activeJobCacheRef.current.progress < 99
+    ) {
+      // Printer transiently reported idle/ready/unknown mid-print: debounce for up to 3 polls
+      if (activeJobCacheRef.current.transientGraceCount < 3) {
+        activeJobCacheRef.current.transientGraceCount++;
+        stabilized = {
+          ...stabilized,
+          printerState: 'Printing',
+          jobName: activeJobCacheRef.current.jobName,
+          progress: activeJobCacheRef.current.progress,
+          currentLayer: activeJobCacheRef.current.currentLayer,
+          totalLayers: activeJobCacheRef.current.totalLayers,
+          timeRemaining: activeJobCacheRef.current.timeRemaining,
+          timeElapsed: activeJobCacheRef.current.timeElapsed,
+          formattedEta: activeJobCacheRef.current.formattedEta,
+          elapsedTimeSeconds: activeJobCacheRef.current.elapsedTimeSeconds,
+          estimatedLength: activeJobCacheRef.current.estimatedLength,
+          estimatedWeight: activeJobCacheRef.current.estimatedWeight,
+        };
+      } else {
+        activeJobCacheRef.current = null;
+      }
+    } else if (isCompleted || /ready|idle|cancel/i.test(stateStr)) {
+      activeJobCacheRef.current = null;
+    }
+
+    setStatus(stabilized);
+  }, []);
+
   // Fetch Printer Status, Features, Station, and Spool
   const refreshStatus = useCallback(async () => {
     const currentId = activeContextIdRef.current;
@@ -165,13 +261,7 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
       ]);
 
       if (statusRes.status === 'fulfilled' && statusRes.value.status) {
-        const rawStatus = statusRes.value.status;
-        const rawProg = rawStatus.progress;
-        const normProg = typeof rawProg === 'number' && rawProg > 0 && rawProg <= 1.0 ? rawProg * 100 : rawProg;
-        setStatus({
-          ...rawStatus,
-          progress: normProg,
-        });
+        applyStatusWithStabilization(statusRes.value.status);
       }
       if (featuresRes.status === 'fulfilled' && featuresRes.value.features) {
         setFeatures(featuresRes.value.features);
@@ -241,12 +331,7 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
     wsClient.connect();
 
     const unbindStatus = wsClient.onStatus((wsStatus) => {
-      const rawProg = wsStatus.progress;
-      const normProg = typeof rawProg === 'number' && rawProg > 0 && rawProg <= 1.0 ? rawProg * 100 : rawProg;
-      setStatus({
-        ...wsStatus,
-        progress: normProg,
-      });
+      applyStatusWithStabilization(wsStatus);
     });
 
     const unbindSpool = wsClient.onSpool((spool) => {
@@ -324,6 +409,7 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const switchContext = useCallback(
     async (contextId: string): Promise<boolean> => {
       try {
+        activeJobCacheRef.current = null;
         const res = await api.switchContext(contextId);
         if (res.success) {
           setActiveContextId(contextId);
@@ -343,6 +429,7 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const selectPrinterByIndex = useCallback(
     async (index: number): Promise<boolean> => {
       try {
+        activeJobCacheRef.current = null;
         const res = await api.selectPrinter(index);
         if (res.success) {
           const targetContext = contexts[index];

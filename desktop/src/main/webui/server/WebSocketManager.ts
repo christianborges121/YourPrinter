@@ -81,6 +81,21 @@ export class WebSocketManager extends EventEmitter {
   // Server state
   private isRunning: boolean = false;
 
+  // Active job cache to protect WebSocket broadcasts from transient null jobName or 0 progress
+  private lastActiveJobCache: {
+    jobName: string;
+    progress: number;
+    currentLayer?: number;
+    totalLayers?: number;
+    timeElapsed?: number;
+    timeRemaining?: number;
+    formattedEta?: string;
+    elapsedTimeSeconds?: number;
+    estimatedWeight?: number;
+    estimatedLength?: number;
+    lastSeen: number;
+  } | null = null;
+
   private constructor() {
     super();
   }
@@ -526,6 +541,51 @@ export class WebSocketManager extends EventEmitter {
     const filtrationMode: 'external' | 'internal' | 'none' =
       rawFiltrationMode === 'external' || rawFiltrationMode === 'internal' ? rawFiltrationMode : 'none';
 
+    const isPrintingOrPaused = /print|pause/i.test(status.state || '');
+    const isCompleted = /completed|finish/i.test(status.state || '');
+
+    let effectiveJobName = currentJob?.fileName || null;
+    let effectiveProgress = isCompleted ? 100 : (currentJob ? currentJob.progress.percentage : 0);
+    let effectiveCurrentLayer = currentJob?.progress.currentLayer ?? undefined;
+    let effectiveTotalLayers = currentJob?.progress.totalLayers ?? undefined;
+    let effectiveTimeElapsed = currentJob?.progress.elapsedTime ?? undefined;
+    let effectiveTimeRemaining = currentJob?.progress.timeRemaining ?? undefined;
+    let effectiveFormattedEta = currentJob?.progress.formattedEta !== undefined ? currentJob.progress.formattedEta : undefined;
+    let effectiveElapsedTimeSeconds =
+      currentJob?.progress.elapsedTimeSeconds !== undefined ? currentJob.progress.elapsedTimeSeconds : undefined;
+    let effectiveEstimatedWeight = currentJob?.progress.weightUsed || undefined;
+    let effectiveEstimatedLength = currentJob?.progress.lengthUsed || undefined;
+
+    if (isPrintingOrPaused && effectiveJobName) {
+      this.lastActiveJobCache = {
+        jobName: effectiveJobName,
+        progress: effectiveProgress,
+        currentLayer: effectiveCurrentLayer,
+        totalLayers: effectiveTotalLayers,
+        timeElapsed: effectiveTimeElapsed,
+        timeRemaining: effectiveTimeRemaining,
+        formattedEta: effectiveFormattedEta,
+        elapsedTimeSeconds: effectiveElapsedTimeSeconds,
+        estimatedWeight: effectiveEstimatedWeight,
+        estimatedLength: effectiveEstimatedLength,
+        lastSeen: Date.now(),
+      };
+    } else if (isPrintingOrPaused && !effectiveJobName && this.lastActiveJobCache && (Date.now() - this.lastActiveJobCache.lastSeen < 60_000)) {
+      // Retain active job telemetry if firmware/transformer dropped jobName during active print
+      effectiveJobName = this.lastActiveJobCache.jobName;
+      if (effectiveProgress === 0) effectiveProgress = this.lastActiveJobCache.progress;
+      if (effectiveCurrentLayer === undefined) effectiveCurrentLayer = this.lastActiveJobCache.currentLayer;
+      if (effectiveTotalLayers === undefined) effectiveTotalLayers = this.lastActiveJobCache.totalLayers;
+      if (effectiveTimeElapsed === undefined) effectiveTimeElapsed = this.lastActiveJobCache.timeElapsed;
+      if (effectiveTimeRemaining === undefined) effectiveTimeRemaining = this.lastActiveJobCache.timeRemaining;
+      if (effectiveFormattedEta === undefined) effectiveFormattedEta = this.lastActiveJobCache.formattedEta;
+      if (effectiveElapsedTimeSeconds === undefined) effectiveElapsedTimeSeconds = this.lastActiveJobCache.elapsedTimeSeconds;
+      if (effectiveEstimatedWeight === undefined) effectiveEstimatedWeight = this.lastActiveJobCache.estimatedWeight;
+      if (effectiveEstimatedLength === undefined) effectiveEstimatedLength = this.lastActiveJobCache.estimatedLength;
+    } else if (/ready|idle|cancel/i.test(status.state || '')) {
+      this.lastActiveJobCache = null;
+    }
+
     return {
       printerState: status.state, // Note: 'state' not 'printerState'
       bedTemperature: Math.round(bedTemp.current),
@@ -537,19 +597,18 @@ export class WebSocketManager extends EventEmitter {
       toolTemps,
       toolTargetTemps,
       // Progress from currentJob if available (100% when completed)
-      progress: /completed|finish/i.test(status.state || '') ? 100 : (currentJob ? currentJob.progress.percentage : 0),
-      currentLayer: currentJob?.progress.currentLayer ?? undefined,
-      totalLayers: currentJob?.progress.totalLayers ?? undefined,
-      jobName: currentJob?.fileName || null,
-      timeElapsed: currentJob?.progress.elapsedTime ?? undefined,
-      timeRemaining: currentJob?.progress.timeRemaining ?? undefined,
-      formattedEta: currentJob?.progress.formattedEta !== undefined ? currentJob.progress.formattedEta : undefined,
-      elapsedTimeSeconds:
-        currentJob?.progress.elapsedTimeSeconds !== undefined ? currentJob.progress.elapsedTimeSeconds : undefined,
+      progress: effectiveProgress,
+      currentLayer: effectiveCurrentLayer,
+      totalLayers: effectiveTotalLayers,
+      jobName: effectiveJobName,
+      timeElapsed: effectiveTimeElapsed,
+      timeRemaining: effectiveTimeRemaining,
+      formattedEta: effectiveFormattedEta,
+      elapsedTimeSeconds: effectiveElapsedTimeSeconds,
       filtrationMode: filtrationMode,
       // Weight and length from job progress
-      estimatedWeight: currentJob?.progress.weightUsed || undefined,
-      estimatedLength: currentJob?.progress.lengthUsed || undefined,
+      estimatedWeight: effectiveEstimatedWeight,
+      estimatedLength: effectiveEstimatedLength,
       thumbnailData: data.thumbnailData || null, // Include thumbnail data
       // Extract lifetime statistics from cumulative stats
       // Backend provides filament usage in meters, same as main UI

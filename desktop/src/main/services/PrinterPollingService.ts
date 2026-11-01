@@ -112,6 +112,7 @@ export class PrinterPollingService extends EventEmitter<PollingServiceEventMap> 
   private isPolling = false;
   private pollingTimer: NodeJS.Timeout | null = null;
   private retryCount = 0;
+  private consecutiveStatusFailures = 0;
   private lastSuccessfulPoll: Date | null = null;
   private currentData: PollingData;
   private backendManager: BackendManager | null = null;
@@ -180,6 +181,7 @@ export class PrinterPollingService extends EventEmitter<PollingServiceEventMap> 
 
     this.isPolling = true;
     this.retryCount = 0;
+    this.consecutiveStatusFailures = 0;
     this.scheduleNextPoll();
 
     this.emit(POLLING_EVENTS.POLLING_STARTED, {
@@ -202,6 +204,7 @@ export class PrinterPollingService extends EventEmitter<PollingServiceEventMap> 
 
     this.isPolling = false;
     this.retryCount = 0;
+    this.consecutiveStatusFailures = 0;
 
     if (this.pollingTimer) {
       clearTimeout(this.pollingTimer);
@@ -286,6 +289,7 @@ export class PrinterPollingService extends EventEmitter<PollingServiceEventMap> 
 
       // Process printer status
       if (printerStatus.status === 'fulfilled' && printerStatus.value) {
+        this.consecutiveStatusFailures = 0;
         newData.printerStatus = printerStatus.value;
         newData.isConnected = true;
         hasChanges = true;
@@ -299,16 +303,27 @@ export class PrinterPollingService extends EventEmitter<PollingServiceEventMap> 
           this.emit(POLLING_EVENTS.JOB_UPDATED, printerStatus.value.currentJob);
         }
       } else {
-        // Connection lost
-        newData.isConnected = false;
-        newData.thumbnailData = null;
+        this.consecutiveStatusFailures++;
+        if (this.consecutiveStatusFailures >= 3) {
+          // Connection confirmed lost after multiple consecutive failures
+          newData.isConnected = false;
+          newData.thumbnailData = null;
 
-        if (this.currentData.isConnected) {
-          hasChanges = true;
-          this.emit(POLLING_EVENTS.CONNECTION_CHANGED, { connected: false });
+          if (this.currentData.isConnected) {
+            hasChanges = true;
+            this.emit(POLLING_EVENTS.CONNECTION_CHANGED, { connected: false });
 
-          // Clear thumbnail on disconnect and clean cache
-          this.clearThumbnailState();
+            // Clear thumbnail on disconnect and clean cache
+            this.clearThumbnailState();
+          }
+        } else {
+          // Grace period: retain existing connection status and printerStatus during transient hiccup
+          this.logDebug(
+            `Transient status failure (${this.consecutiveStatusFailures}/3). Retaining last known status.`
+          );
+          newData.isConnected = this.currentData.isConnected;
+          newData.printerStatus = this.currentData.printerStatus;
+          newData.thumbnailData = this.currentData.thumbnailData;
         }
       }
 
