@@ -3,6 +3,7 @@ import 'package:yourprinter/models/auth_models.dart';
 import 'package:yourprinter/models/camera_config.dart';
 import 'package:yourprinter/models/job_file.dart';
 import 'package:yourprinter/models/material_station.dart';
+import 'package:yourprinter/models/printer_capabilities.dart';
 import 'package:yourprinter/models/printer_context.dart';
 import 'package:yourprinter/models/printer_features.dart';
 import 'package:yourprinter/models/printer_status.dart';
@@ -60,9 +61,164 @@ void main() {
       expect(status.progress, 0.0);
       expect(status.toolTemps, isEmpty);
       expect(status.watchdog, isNull);
+      expect(status.printSpeed, 100.0);
+      expect(status.coolingFanSpeed, 0.0);
+      expect(status.chamberFanSpeed, 0.0);
+      expect(status.ledState, false);
+      expect(status.elapsedTimeSeconds, 0);
+      expect(status.cumulativeFilament, 0.0);
+      expect(status.cumulativePrintTime, 0);
     });
 
-    test('PrinterFeatures parses capability flags', () {
+    test('PrinterStatusData parses expanded telemetry fields with aliases and roundtrips', () {
+      final json = {
+        'printerState': 'PRINTING',
+        'bedTemperature': 60.0,
+        'bedTargetTemperature': 60.0,
+        'nozzleTemperature': 220.0,
+        'nozzleTargetTemperature': 220.0,
+        'progress': 50.0,
+        'currentLayer': 100,
+        'totalLayers': 200,
+        'printSpeed': 140.0,
+        'coolingFanSpeed': 75.0,
+        'chamberFanSpeed': 40.0,
+        'ledState': true,
+        'elapsedTimeSeconds': 3600,
+        'cumulativeFilament': 1250.5,
+        'cumulativePrintTime': 72000,
+      };
+
+      final status = PrinterStatusData.fromJson(json);
+
+      expect(status.printSpeed, 140.0);
+      expect(status.coolingFanSpeed, 75.0);
+      expect(status.chamberFanSpeed, 40.0);
+      expect(status.ledState, true);
+      expect(status.elapsedTimeSeconds, 3600);
+      expect(status.cumulativeFilament, 1250.5);
+      expect(status.cumulativePrintTime, 72000);
+
+      // copyWith test
+      final updated = status.copyWith(printSpeed: 100.0, coolingFanSpeed: 50.0);
+      expect(updated.printSpeed, 100.0);
+      expect(updated.coolingFanSpeed, 50.0);
+      expect(updated.ledState, true); // preserved
+
+      // toJson test
+      final serialized = updated.toJson();
+      expect(serialized['printSpeed'], 100.0);
+      expect(serialized['coolingFanSpeed'], 50.0);
+      expect(serialized['ledState'], true);
+      expect(serialized['cumulativeFilament'], 1250.5);
+    });
+
+    test('PrinterStatusData maps fallback aliases for fan speed and elapsed time', () {
+      final json = {
+        'printerState': 'PRINTING',
+        'bedTemperature': 55.0,
+        'bedTargetTemperature': 55.0,
+        'nozzleTemperature': 200.0,
+        'nozzleTargetTemperature': 200.0,
+        'progress': 25.0,
+        'currentLayer': 50,
+        'totalLayers': 200,
+        'fanSpeed': 85.0, // fallback alias for coolingFanSpeed
+        'timeElapsed': 1200, // fallback alias for elapsedTimeSeconds
+      };
+
+      final status = PrinterStatusData.fromJson(json);
+
+      expect(status.printSpeed, 100.0); // default fallback
+      expect(status.coolingFanSpeed, 85.0);
+      expect(status.elapsedTimeSeconds, 1200);
+    });
+
+    test('PrinterNetworkCapabilities parses full payload and round-trips via toJson', () {
+      final json = {
+        'canJog': true,
+        'canHome': true,
+        'canBedLevel': true,
+        'supportedAxes': ['X', 'Y', 'Z'],
+        'hasBedHeater': true,
+        'hasExtruderHeater': true,
+        'hasChamberHeater': true,
+        'nozzleCount': 2,
+        'maxBedTemp': 120.0,
+        'maxExtruderTemp': 320.0,
+        'maxChamberTemp': 80.0,
+        'hasPartCoolingFan': true,
+        'hasChamberFan': true,
+        'hasAuxFan': false,
+        'hasFiltration': true,
+        'hasLedControl': true,
+        'canAdjustSpeed': true,
+        'canAdjustZOffset': true,
+        'hasCamera': true,
+        'hasMaterialStation': true,
+        'maxMaterialSlots': 4,
+        'canPause': true,
+        'canResume': true,
+        'canCancel': true,
+      };
+
+      final caps = PrinterNetworkCapabilities.fromJson(json);
+
+      expect(caps.canJog, true);
+      expect(caps.canHome, true);
+      expect(caps.canBedLevel, true);
+      expect(caps.supportedAxes, ['X', 'Y', 'Z']);
+      expect(caps.hasBedHeater, true);
+      expect(caps.hasExtruderHeater, true);
+      expect(caps.hasChamberHeater, true);
+      expect(caps.nozzleCount, 2);
+      expect(caps.maxBedTemp, 120.0);
+      expect(caps.maxExtruderTemp, 320.0);
+      expect(caps.maxChamberTemp, 80.0);
+      expect(caps.hasPartCoolingFan, true);
+      expect(caps.hasChamberFan, true);
+      expect(caps.hasAuxFan, false);
+      expect(caps.hasFiltration, true);
+      expect(caps.hasLedControl, true);
+      expect(caps.canAdjustSpeed, true);
+      expect(caps.canAdjustZOffset, true);
+      expect(caps.hasCamera, true);
+      expect(caps.hasMaterialStation, true);
+      expect(caps.maxMaterialSlots, 4);
+      expect(caps.canPause, true);
+      expect(caps.canResume, true);
+      expect(caps.canCancel, true);
+
+      // Verify toJson roundtrip
+      final serialized = caps.toJson();
+      expect(serialized['canJog'], true);
+      expect(serialized['nozzleCount'], 2);
+      expect(serialized['maxChamberTemp'], 80.0);
+
+      // Verify copyWith
+      final modified = caps.copyWith(canJog: false, maxBedTemp: 130.0);
+      expect(modified.canJog, false);
+      expect(modified.maxBedTemp, 130.0);
+      expect(modified.nozzleCount, 2);
+    });
+
+    test('PrinterNetworkCapabilities gracefully handles empty json with defaults', () {
+      final caps = PrinterNetworkCapabilities.fromJson({});
+      expect(caps.canJog, false);
+      expect(caps.canHome, false);
+      expect(caps.canBedLevel, false);
+      expect(caps.hasBedHeater, true);
+      expect(caps.hasExtruderHeater, true);
+      expect(caps.hasChamberHeater, false);
+      expect(caps.nozzleCount, 1);
+      expect(caps.maxBedTemp, 100.0);
+      expect(caps.maxExtruderTemp, 260.0);
+      expect(caps.maxChamberTemp, isNull);
+      expect(caps.supportedAxes, ['X', 'Y', 'Z']);
+      expect(caps.canPause, true);
+    });
+
+    test('PrinterFeatures parses capability flags and nested capabilities', () {
       final json = {
         'hasCamera': true,
         'hasLED': true,
@@ -71,6 +227,14 @@ void main() {
         'canPause': true,
         'canResume': true,
         'canCancel': true,
+        'ledUsesLegacyAPI': false,
+        'capabilities': {
+          'canJog': false,
+          'canHome': false,
+          'hasChamberHeater': true,
+          'maxChamberTemp': 80.0,
+          'nozzleCount': 4,
+        },
       };
 
       final features = PrinterFeatures.fromJson(json);
@@ -78,6 +242,16 @@ void main() {
       expect(features.hasCamera, true);
       expect(features.hasFiltration, true);
       expect(features.hasMaterialStation, true);
+      expect(features.capabilities, isNotNull);
+      expect(features.capabilities!.canJog, false);
+      expect(features.capabilities!.hasChamberHeater, true);
+      expect(features.capabilities!.maxChamberTemp, 80.0);
+      expect(features.capabilities!.nozzleCount, 4);
+
+      // roundtrip
+      final serialized = features.toJson();
+      expect(serialized['hasCamera'], true);
+      expect(serialized['capabilities'], isNotNull);
     });
 
     test('CameraProxyConfigResponse parses go2rtc config and concurrencyNotice', () {
@@ -119,6 +293,28 @@ void main() {
       expect(station.slots[1].isActive, true);
       expect(station.slots[1].materialColor, '#00FF00');
       expect(station.slots[2].isEmpty, true);
+    });
+
+    test('ActiveSpoolData parses Spoolman catalog item and handles defaults', () {
+      final json = {
+        'id': 42,
+        'name': 'PolyLite PLA Pro',
+        'vendor': 'Polymaker',
+        'material': 'PLA',
+        'colorHex': '#3B82F6',
+        'remainingWeight': 740.0,
+        'remainingLength': 245.5,
+      };
+
+      final spool = ActiveSpoolData.fromJson(json);
+
+      expect(spool.id, 42);
+      expect(spool.name, 'PolyLite PLA Pro');
+      expect(spool.vendor, 'Polymaker');
+      expect(spool.material, 'PLA');
+      expect(spool.colorHex, '#3B82F6');
+      expect(spool.remainingWeight, 740.0);
+      expect(spool.remainingLength, 245.5);
     });
 
     test('WebUIJobFile parses metadata and print time', () {
