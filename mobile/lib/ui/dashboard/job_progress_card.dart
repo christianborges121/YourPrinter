@@ -129,6 +129,132 @@ class JobProgressCard extends ConsumerWidget {
               ],
             ),
 
+            // Metadata Grid: Time Left, Elapsed, Filament Est.
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceSecondary,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(LucideIcons.clock, size: 12, color: AppColors.textMuted),
+                            SizedBox(width: 4),
+                            Text('Time Left', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          status.timeRemaining != null
+                              ? _formatDuration(status.timeRemaining!)
+                              : (status.formattedEta ?? '--'),
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(LucideIcons.timer, size: 12, color: AppColors.textMuted),
+                            SizedBox(width: 4),
+                            Text('Elapsed', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _formatDuration(status.elapsedTimeSeconds > 0 ? status.elapsedTimeSeconds : (status.timeElapsed ?? 0)),
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (status.estimatedLength != null || status.estimatedWeight != null)
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Filament Est.', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${status.estimatedLength != null ? "${(status.estimatedLength! / 1000).toStringAsFixed(1)}m" : ""}${status.estimatedWeight != null ? " (${status.estimatedWeight!.toStringAsFixed(0)}g)" : ""}',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
+            // Speed Rate Quick Bar (Active Print)
+            if (status.hasActiveJob) ...[
+              const SizedBox(height: 10),
+              Container(
+                key: const Key('job_speed_quick_bar'),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceSecondary,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(LucideIcons.gauge, size: 14, color: AppColors.warning),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Speed: ${status.printSpeed.round()}%',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.warning),
+                    ),
+                    const Spacer(),
+                    for (final preset in [
+                      (50, '50% Quiet'),
+                      (100, '100% Std'),
+                      (140, '140% Sport'),
+                    ]) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4),
+                        child: OutlinedButton(
+                          key: Key('job_speed_preset_${preset.$1}'),
+                          style: OutlinedButton.styleFrom(
+                            backgroundColor: (status.printSpeed - preset.$1).abs() < 15
+                                ? AppColors.warning.withValues(alpha: 0.2)
+                                : AppColors.surface,
+                            foregroundColor: (status.printSpeed - preset.$1).abs() < 15
+                                ? AppColors.warning
+                                : AppColors.textSecondary,
+                            side: BorderSide(
+                              color: (status.printSpeed - preset.$1).abs() < 15
+                                  ? AppColors.warning
+                                  : AppColors.border,
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            minimumSize: Size.zero,
+                          ),
+                          onPressed: () async {
+                            await printerService.setPrintSpeed(preset.$1, contextId: activeContext?.contextId);
+                          },
+                          child: Text(preset.$2, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+
             // Completed Banner with Clear Action
             if (isCompleted) ...[
               const SizedBox(height: 14),
@@ -224,6 +350,16 @@ class JobProgressCard extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  String _formatDuration(int totalSeconds) {
+    if (totalSeconds <= 0) return '--';
+    final hours = totalSeconds ~/ 3600;
+    final minutes = (totalSeconds % 3600) ~/ 60;
+    if (hours > 0) {
+      return '${hours}h ${minutes}m';
+    }
+    return '${minutes}m ${totalSeconds % 60}s';
   }
 
   String _formatSeconds(int totalSeconds) {

@@ -6,6 +6,7 @@ import '../../models/material_station.dart';
 import '../../state/auth_provider.dart';
 import '../../state/printer_context_provider.dart';
 import '../../state/telemetry_provider.dart';
+import '../controls/spool_select_sheet.dart';
 
 class AmsSpoolCard extends ConsumerStatefulWidget {
   const AmsSpoolCard({super.key});
@@ -103,8 +104,9 @@ class _AmsSpoolCardState extends ConsumerState<AmsSpoolCard> {
     final station = telemetry.materialStation;
     final activeSpool = telemetry.activeSpool;
 
-    if ((station == null || !station.connected || station.slots.isEmpty) && activeSpool == null) {
-      return const SizedBox.shrink();
+    final hasHardwareAms = (station != null && station.connected && station.slots.isNotEmpty);
+    if (!hasHardwareAms) {
+      return _buildDedicatedSpoolmanCard(context, activeSpool);
     }
 
     final isMultiHead = _isMultiHeadPrinter(telemetry, contextState);
@@ -126,7 +128,7 @@ class _AmsSpoolCardState extends ConsumerState<AmsSpoolCard> {
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
                 ),
                 const Spacer(),
-                if (station != null && station.connected)
+                if (station.connected)
                   _buildStatusPill(station, isMultiHead),
                 const SizedBox(width: 6),
                 InkWell(
@@ -142,7 +144,7 @@ class _AmsSpoolCardState extends ConsumerState<AmsSpoolCard> {
             const SizedBox(height: 12),
 
             // Material Station Slots Grid (2x2 on mobile for full readability like WebUI cards)
-            if (station != null && station.slots.isNotEmpty) ...[
+            if (station.slots.isNotEmpty) ...[
               LayoutBuilder(
                 builder: (context, constraints) {
                   // 2 columns if >2 slots so spool disc, hex code, and Load/Unload fit cleanly
@@ -233,6 +235,200 @@ class _AmsSpoolCardState extends ConsumerState<AmsSpoolCard> {
                     ),
                   ),
                 ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDedicatedSpoolmanCard(BuildContext context, ActiveSpoolData? activeSpool) {
+    final spoolColor = activeSpool != null ? _parseColor(activeSpool.colorHex, false) : AppColors.accentGreen;
+    final remainingWeight = activeSpool != null ? activeSpool.remainingWeight.clamp(0.0, 5000.0) : 0.0;
+    final remainingPercent = ((remainingWeight / 1000.0) * 100).clamp(0.0, 100.0);
+
+    return Card(
+      key: const Key('dedicated_spoolman_card'),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Row(
+              children: [
+                const Icon(LucideIcons.disc, size: 16, color: AppColors.accentGreen),
+                const SizedBox(width: 8),
+                const Text(
+                  'Active Filament & Spool',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                ),
+                const Spacer(),
+                InkWell(
+                  onTap: _handleRefresh,
+                  borderRadius: BorderRadius.circular(6),
+                  child: const Padding(
+                    padding: EdgeInsets.all(4),
+                    child: Icon(LucideIcons.refreshCw, size: 14, color: AppColors.textMuted),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            if (activeSpool != null) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceSecondary,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        // Spool Disc Visual
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: spoolColor,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white24, width: 2),
+                            boxShadow: [
+                              BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 4),
+                            ],
+                          ),
+                          child: Center(
+                            child: Container(
+                              width: 14,
+                              height: 14,
+                              decoration: const BoxDecoration(
+                                color: AppColors.surface,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(LucideIcons.disc, size: 8, color: Colors.white54),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+
+                        // Spool Metadata
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${activeSpool.vendor ?? 'Generic'} ${activeSpool.name}',
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${activeSpool.material ?? 'PLA'} \u00B7 ${remainingWeight.toStringAsFixed(0)}g left',
+                                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Progress Bar
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: (remainingPercent / 100.0).clamp(0.0, 1.0),
+                        minHeight: 6,
+                        backgroundColor: AppColors.border,
+                        valueColor: AlwaysStoppedAnimation<Color>(spoolColor),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              // Action Buttons: Change & Clear
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      key: const Key('spoolman_change_btn'),
+                      onPressed: () {
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: AppColors.surface,
+                          builder: (_) => const SpoolSelectSheet(),
+                        );
+                      },
+                      icon: const Icon(LucideIcons.pencil, size: 14),
+                      label: const Text('Change Spool', style: TextStyle(fontSize: 12)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    key: const Key('spoolman_clear_btn'),
+                    style: OutlinedButton.styleFrom(foregroundColor: AppColors.error),
+                    onPressed: () async {
+                      final activeId = ref.read(printerContextProvider).activeContextId;
+                      await ref.read(printerServiceProvider).clearActiveSpool(contextId: activeId);
+                      await ref.read(telemetryProvider.notifier).fetchStatus(contextId: activeId);
+                    },
+                    icon: const Icon(LucideIcons.trash2, size: 14),
+                    label: const Text('Clear', style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+            ] else ...[
+              // Empty State
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceSecondary,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Column(
+                  children: [
+                    const Icon(LucideIcons.disc, size: 32, color: AppColors.textMuted),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'No Spool Assigned',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Assign a spool from Spoolman to track filament consumption and colors.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton.icon(
+                      key: const Key('spoolman_select_spool_btn'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.accentGreen,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      ),
+                      onPressed: () {
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: AppColors.surface,
+                          builder: (_) => const SpoolSelectSheet(),
+                        );
+                      },
+                      icon: const Icon(LucideIcons.plus, size: 14),
+                      label: const Text('Select Spool', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
               ),
             ],
           ],

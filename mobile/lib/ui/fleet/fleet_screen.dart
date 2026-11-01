@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -9,13 +10,60 @@ import '../common/not_configured_view.dart';
 import '../common/yourprinter_logo.dart';
 import 'fleet_printer_card.dart';
 
-class FleetScreen extends ConsumerWidget {
+class FleetScreen extends ConsumerStatefulWidget {
   final Function(int) onTabSelected;
 
   const FleetScreen({super.key, required this.onTabSelected});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<FleetScreen> createState() => _FleetScreenState();
+}
+
+class _FleetScreenState extends ConsumerState<FleetScreen> {
+  bool _camerasVisible = true;
+  bool? _overrideStreaming;
+  int? _timedCountdown;
+  Timer? _countdownTimer;
+
+  @override
+  void dispose() {
+    _countdownTimer?.cancel();
+    super.dispose();
+  }
+
+  void _toggleTimedPreview() {
+    if (_timedCountdown != null) {
+      _countdownTimer?.cancel();
+      setState(() {
+        _timedCountdown = null;
+        _overrideStreaming = false;
+      });
+    } else {
+      setState(() {
+        _timedCountdown = 30;
+        _overrideStreaming = true;
+      });
+      _countdownTimer?.cancel();
+      _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (!mounted) {
+          timer.cancel();
+          return;
+        }
+        if (_timedCountdown != null && _timedCountdown! > 1) {
+          setState(() => _timedCountdown = _timedCountdown! - 1);
+        } else {
+          timer.cancel();
+          setState(() {
+            _timedCountdown = null;
+            _overrideStreaming = false;
+          });
+        }
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final fleetState = ref.watch(fleetProvider);
 
     return Scaffold(
@@ -51,7 +99,7 @@ class FleetScreen extends ConsumerWidget {
       body: fleetState.isLoading && fleetState.printers.isEmpty
           ? const Center(child: CircularProgressIndicator(color: AppColors.accentGreen))
           : ref.watch(connectionProvider).status == ServerConnectionStatus.unreachable
-              ? NotConfiguredView(onOpenSettings: () => onTabSelected(3))
+              ? NotConfiguredView(onOpenSettings: () => widget.onTabSelected(3))
               : fleetState.printers.isEmpty
                   ? Center(
                       child: Padding(
@@ -78,28 +126,161 @@ class FleetScreen extends ConsumerWidget {
                         ),
                       ),
                     )
-                  : RefreshIndicator(
-                  color: AppColors.accentGreen,
-                  onRefresh: () => ref.read(fleetProvider.notifier).fetchOverview(),
-                  child: ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    itemCount: fleetState.printers.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: 14),
-                    itemBuilder: (context, index) {
-                      final printer = fleetState.printers[index];
-                      return FleetPrinterCard(
-                        printer: printer,
-                        onTap: () {
-                          if (printer.contextId != null) {
-                            ref.read(printerContextProvider.notifier).switchContext(printer.contextId!);
-                          }
-                          // Switch to Dashboard Tab (index 1)
-                          onTabSelected(1);
-                        },
-                      );
-                    },
-                  ),
-                ),
+                  : Column(
+                      children: [
+                        // Master Fleet Controls Bar (Show/Hide Cameras, Stream/Pause All, 30s Timed Preview)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          decoration: const BoxDecoration(
+                            color: AppColors.surface,
+                            border: Border(bottom: BorderSide(color: AppColors.border, width: 0.5)),
+                          ),
+                          child: Row(
+                            children: [
+                              // 1. Show / Hide Cameras Toggle
+                              InkWell(
+                                onTap: () => setState(() => _camerasVisible = !_camerasVisible),
+                                borderRadius: BorderRadius.circular(6),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: _camerasVisible ? AppColors.accentGreenSubtle : AppColors.surfaceSecondary,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: _camerasVisible ? AppColors.accentGreen.withValues(alpha: 0.4) : AppColors.border),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        _camerasVisible ? LucideIcons.video : LucideIcons.videoOff,
+                                        size: 13,
+                                        color: _camerasVisible ? AppColors.accentGreen : AppColors.textMuted,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        _camerasVisible ? 'Cameras' : 'Hidden',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: _camerasVisible ? AppColors.accentGreen : AppColors.textMuted,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+
+                              const Spacer(),
+
+                              // 2. Stream All / Pause All Batch Trigger
+                              InkWell(
+                                onTap: () {
+                                  final next = !(_overrideStreaming == true);
+                                  setState(() {
+                                    _overrideStreaming = next;
+                                    if (!next && _timedCountdown != null) {
+                                      _countdownTimer?.cancel();
+                                      _timedCountdown = null;
+                                    }
+                                  });
+                                },
+                                borderRadius: BorderRadius.circular(6),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: _overrideStreaming == true ? AppColors.accentGreenSubtle : AppColors.surfaceSecondary,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: _overrideStreaming == true ? AppColors.accentGreen.withValues(alpha: 0.4) : AppColors.border),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        _overrideStreaming == true ? LucideIcons.pause : LucideIcons.play,
+                                        size: 13,
+                                        color: _overrideStreaming == true ? AppColors.accentGreen : AppColors.textMuted,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        _overrideStreaming == true ? 'Pause All' : 'Stream All',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: _overrideStreaming == true ? AppColors.accentGreen : AppColors.textMuted,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+
+                              const SizedBox(width: 6),
+
+                              // 3. 30s Timed Preview
+                              InkWell(
+                                onTap: _toggleTimedPreview,
+                                borderRadius: BorderRadius.circular(6),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: _timedCountdown != null ? AppColors.infoSubtle : AppColors.surfaceSecondary,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: _timedCountdown != null ? AppColors.info : AppColors.border),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        LucideIcons.clock,
+                                        size: 13,
+                                        color: _timedCountdown != null ? AppColors.info : AppColors.textMuted,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        _timedCountdown != null ? '${_timedCountdown}s' : '30s Preview',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: _timedCountdown != null ? AppColors.info : AppColors.textMuted,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Printer List View
+                        Expanded(
+                          child: RefreshIndicator(
+                            color: AppColors.accentGreen,
+                            onRefresh: () => ref.read(fleetProvider.notifier).fetchOverview(),
+                            child: ListView.separated(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                              itemCount: fleetState.printers.length,
+                              separatorBuilder: (context, index) => const SizedBox(height: 14),
+                              itemBuilder: (context, index) {
+                                final printer = fleetState.printers[index];
+                                return FleetPrinterCard(
+                                  printer: printer,
+                                  camerasVisible: _camerasVisible,
+                                  overrideStreaming: _overrideStreaming,
+                                  onTap: () {
+                                    if (printer.contextId != null) {
+                                      ref.read(printerContextProvider.notifier).switchContext(printer.contextId!);
+                                    }
+                                    // Switch to Dashboard Tab (index 1)
+                                    widget.onTabSelected(1);
+                                  },
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
     );
   }
 }

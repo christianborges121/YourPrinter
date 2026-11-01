@@ -12,11 +12,15 @@ import '../common/status_badge.dart';
 class FleetPrinterCard extends ConsumerStatefulWidget {
   final FleetOverviewPrinter printer;
   final VoidCallback onTap;
+  final bool camerasVisible;
+  final bool? overrideStreaming;
 
   const FleetPrinterCard({
     super.key,
     required this.printer,
     required this.onTap,
+    this.camerasVisible = true,
+    this.overrideStreaming,
   });
 
   @override
@@ -29,6 +33,18 @@ class _FleetPrinterCardState extends ConsumerState<FleetPrinterCard> {
 
   void _onCameraChanged() {
     if (mounted) setState(() {});
+  }
+
+  @override
+  void didUpdateWidget(FleetPrinterCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.overrideStreaming != null && widget.overrideStreaming != oldWidget.overrideStreaming) {
+      if (widget.overrideStreaming == true && !_isPlaying) {
+        _togglePlay();
+      } else if (widget.overrideStreaming == false && _isPlaying) {
+        _togglePlay();
+      }
+    }
   }
 
   @override
@@ -134,8 +150,9 @@ class _FleetPrinterCardState extends ConsumerState<FleetPrinterCard> {
             ),
 
             // 2. Widescreen 16:9 Camera Stage
-            AspectRatio(
-              aspectRatio: 16 / 9,
+            if (widget.camerasVisible)
+              AspectRatio(
+                aspectRatio: 16 / 9,
               child: Container(
                 color: Colors.black,
                 child: Stack(
