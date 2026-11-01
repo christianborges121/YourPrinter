@@ -19,6 +19,7 @@ class ApiEndpoints {
   // Printer Telemetry & Capabilities
   static const String printerStatus = '/api/printer/status';
   static const String printerFeatures = '/api/printer/features';
+  static const String printerCapabilities = '/api/printer/capabilities';
   static const String printerMaterialStation = '/api/printer/material-station';
 
   // Camera
@@ -30,6 +31,9 @@ class ApiEndpoints {
   static const String jobResume = '/api/printer/control/resume';
   static const String jobCancel = '/api/printer/control/cancel';
   static const String homeAxes = '/api/printer/control/home';
+  static const String homeSpecific = '/api/printer/control/home-specific';
+  static const String speedRate = '/api/printer/control/speed';
+  static const String fanSpeed = '/api/printer/control/fan';
   static const String clearStatus = '/api/printer/control/clear-status';
   static const String ledOn = '/api/printer/control/led-on';
   static const String ledOff = '/api/printer/control/led-off';
@@ -66,4 +70,5 @@ class ApiEndpoints {
   static const String spoolmanSpools = '/api/spoolman/spools';
   static String spoolmanActive(String contextId) => '/api/spoolman/active/$contextId';
   static const String spoolmanSelect = '/api/spoolman/select';
+  static const String spoolmanClear = '/api/spoolman/clear';
 }

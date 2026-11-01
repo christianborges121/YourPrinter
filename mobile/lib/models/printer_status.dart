@@ -19,6 +19,15 @@ class WatchdogSnapshotItem {
       layer: json['layer']?.toString() ?? '0',
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'filename': filename,
+      'timestamp': timestamp,
+      'confidence': confidence,
+      'layer': layer,
+    };
+  }
 }
 
 class WatchdogStatusData {
@@ -60,6 +69,21 @@ class WatchdogStatusData {
       activeJob: json['active_job'] as String?,
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'online': online,
+      'state': state,
+      'confidence': confidence,
+      'threshold': threshold,
+      'auto_pause_enabled': autoPauseEnabled,
+      'auto_pause_triggered': autoPauseTriggered,
+      'consecutive_failures': consecutiveFailures,
+      'consecutive_required': consecutiveRequired,
+      'check_interval_sec': checkIntervalSec,
+      if (activeJob != null) 'active_job': activeJob,
+    };
+  }
 }
 
 class PrinterStatusData {
@@ -85,6 +109,15 @@ class PrinterStatusData {
   final String? formattedEta;
   final WatchdogStatusData? watchdog;
 
+  // WebUI parity telemetry fields
+  final double printSpeed;
+  final double coolingFanSpeed;
+  final double chamberFanSpeed;
+  final bool ledState;
+  final int elapsedTimeSeconds;
+  final double cumulativeFilament;
+  final int cumulativePrintTime;
+
   const PrinterStatusData({
     required this.printerState,
     required this.bedTemperature,
@@ -107,6 +140,13 @@ class PrinterStatusData {
     this.thumbnailData,
     this.formattedEta,
     this.watchdog,
+    this.printSpeed = 100.0,
+    this.coolingFanSpeed = 0.0,
+    this.chamberFanSpeed = 0.0,
+    this.ledState = false,
+    this.elapsedTimeSeconds = 0,
+    this.cumulativeFilament = 0.0,
+    this.cumulativePrintTime = 0,
   });
 
   bool get isPaused => printerState.toLowerCase().contains('pause');
@@ -148,6 +188,123 @@ class PrinterStatusData {
       watchdog: json['watchdog'] != null
           ? WatchdogStatusData.fromJson(json['watchdog'] as Map<String, dynamic>)
           : null,
+      printSpeed: (json['printSpeed'] as num?)?.toDouble() ??
+          (json['currentPrintSpeed'] as num?)?.toDouble() ??
+          (json['speed'] as num?)?.toDouble() ??
+          100.0,
+      coolingFanSpeed: (json['coolingFanSpeed'] as num?)?.toDouble() ??
+          (json['fanSpeed'] as num?)?.toDouble() ??
+          0.0,
+      chamberFanSpeed: (json['chamberFanSpeed'] as num?)?.toDouble() ??
+          (json['chamberFan'] as num?)?.toDouble() ??
+          0.0,
+      ledState: json['ledState'] as bool? ??
+          json['led'] as bool? ??
+          false,
+      elapsedTimeSeconds: (json['elapsedTimeSeconds'] as num?)?.toInt() ??
+          (json['timeElapsed'] as num?)?.toInt() ??
+          0,
+      cumulativeFilament: (json['cumulativeFilament'] as num?)?.toDouble() ??
+          (json['totalFilamentUsed'] as num?)?.toDouble() ??
+          0.0,
+      cumulativePrintTime: (json['cumulativePrintTime'] as num?)?.toInt() ??
+          (json['totalPrintTime'] as num?)?.toInt() ??
+          0,
     );
+  }
+
+  PrinterStatusData copyWith({
+    String? printerState,
+    double? bedTemperature,
+    double? bedTargetTemperature,
+    double? nozzleTemperature,
+    double? nozzleTargetTemperature,
+    double? chamberTemperature,
+    double? chamberTargetTemperature,
+    List<double>? toolTemps,
+    List<double>? toolTargetTemps,
+    double? progress,
+    int? currentLayer,
+    int? totalLayers,
+    String? jobName,
+    int? timeElapsed,
+    int? timeRemaining,
+    String? filtrationMode,
+    double? estimatedWeight,
+    double? estimatedLength,
+    String? thumbnailData,
+    String? formattedEta,
+    WatchdogStatusData? watchdog,
+    double? printSpeed,
+    double? coolingFanSpeed,
+    double? chamberFanSpeed,
+    bool? ledState,
+    int? elapsedTimeSeconds,
+    double? cumulativeFilament,
+    int? cumulativePrintTime,
+  }) {
+    return PrinterStatusData(
+      printerState: printerState ?? this.printerState,
+      bedTemperature: bedTemperature ?? this.bedTemperature,
+      bedTargetTemperature: bedTargetTemperature ?? this.bedTargetTemperature,
+      nozzleTemperature: nozzleTemperature ?? this.nozzleTemperature,
+      nozzleTargetTemperature: nozzleTargetTemperature ?? this.nozzleTargetTemperature,
+      chamberTemperature: chamberTemperature ?? this.chamberTemperature,
+      chamberTargetTemperature: chamberTargetTemperature ?? this.chamberTargetTemperature,
+      toolTemps: toolTemps ?? this.toolTemps,
+      toolTargetTemps: toolTargetTemps ?? this.toolTargetTemps,
+      progress: progress ?? this.progress,
+      currentLayer: currentLayer ?? this.currentLayer,
+      totalLayers: totalLayers ?? this.totalLayers,
+      jobName: jobName ?? this.jobName,
+      timeElapsed: timeElapsed ?? this.timeElapsed,
+      timeRemaining: timeRemaining ?? this.timeRemaining,
+      filtrationMode: filtrationMode ?? this.filtrationMode,
+      estimatedWeight: estimatedWeight ?? this.estimatedWeight,
+      estimatedLength: estimatedLength ?? this.estimatedLength,
+      thumbnailData: thumbnailData ?? this.thumbnailData,
+      formattedEta: formattedEta ?? this.formattedEta,
+      watchdog: watchdog ?? this.watchdog,
+      printSpeed: printSpeed ?? this.printSpeed,
+      coolingFanSpeed: coolingFanSpeed ?? this.coolingFanSpeed,
+      chamberFanSpeed: chamberFanSpeed ?? this.chamberFanSpeed,
+      ledState: ledState ?? this.ledState,
+      elapsedTimeSeconds: elapsedTimeSeconds ?? this.elapsedTimeSeconds,
+      cumulativeFilament: cumulativeFilament ?? this.cumulativeFilament,
+      cumulativePrintTime: cumulativePrintTime ?? this.cumulativePrintTime,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'printerState': printerState,
+      'bedTemperature': bedTemperature,
+      'bedTargetTemperature': bedTargetTemperature,
+      'nozzleTemperature': nozzleTemperature,
+      'nozzleTargetTemperature': nozzleTargetTemperature,
+      if (chamberTemperature != null) 'chamberTemperature': chamberTemperature,
+      if (chamberTargetTemperature != null) 'chamberTargetTemperature': chamberTargetTemperature,
+      'toolTemps': toolTemps,
+      'toolTargetTemps': toolTargetTemps,
+      'progress': progress,
+      'currentLayer': currentLayer,
+      'totalLayers': totalLayers,
+      if (jobName != null) 'jobName': jobName,
+      if (timeElapsed != null) 'timeElapsed': timeElapsed,
+      if (timeRemaining != null) 'timeRemaining': timeRemaining,
+      'filtrationMode': filtrationMode,
+      if (estimatedWeight != null) 'estimatedWeight': estimatedWeight,
+      if (estimatedLength != null) 'estimatedLength': estimatedLength,
+      if (thumbnailData != null) 'thumbnailData': thumbnailData,
+      if (formattedEta != null) 'formattedEta': formattedEta,
+      if (watchdog != null) 'watchdog': watchdog!.toJson(),
+      'printSpeed': printSpeed,
+      'coolingFanSpeed': coolingFanSpeed,
+      'chamberFanSpeed': chamberFanSpeed,
+      'ledState': ledState,
+      'elapsedTimeSeconds': elapsedTimeSeconds,
+      'cumulativeFilament': cumulativeFilament,
+      'cumulativePrintTime': cumulativePrintTime,
+    };
   }
 }

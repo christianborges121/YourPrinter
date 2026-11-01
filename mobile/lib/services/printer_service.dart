@@ -3,6 +3,7 @@ import '../core/network/api_client.dart';
 import '../models/auth_models.dart';
 import '../models/job_file.dart';
 import '../models/material_station.dart';
+import '../models/printer_capabilities.dart';
 import '../models/printer_context.dart';
 import '../models/printer_features.dart';
 import '../models/printer_status.dart';
@@ -91,6 +92,21 @@ class PrinterService {
     return PrinterFeatures.fromJson(featuresJson);
   }
 
+  Future<PrinterNetworkCapabilities?> getPrinterCapabilities({String? contextId}) async {
+    try {
+      final query = contextId != null ? {'contextId': contextId} : null;
+      final res = await apiClient.get(
+        ApiEndpoints.printerCapabilities,
+        queryParameters: query,
+      );
+      final data = res.data as Map<String, dynamic>;
+      if (data['capabilities'] != null) {
+        return PrinterNetworkCapabilities.fromJson(data['capabilities'] as Map<String, dynamic>);
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<MaterialStationStatus?> getMaterialStation({String? contextId}) async {
     final query = contextId != null ? {'contextId': contextId} : null;
     final res = await apiClient.get(ApiEndpoints.printerMaterialStation, queryParameters: query);
@@ -121,7 +137,7 @@ class PrinterService {
     return (res.data as Map<String, dynamic>)['success'] == true;
   }
 
-  // Job Controls
+  // Job & Hardware Controls
   Future<bool> pauseJob({String? contextId}) async {
     final query = contextId != null ? {'contextId': contextId} : null;
     final res = await apiClient.post(ApiEndpoints.jobPause, queryParameters: query);
@@ -149,6 +165,64 @@ class PrinterService {
     final res = await apiClient.post(ApiEndpoints.homeAxes, queryParameters: query);
     return (res.data as Map<String, dynamic>)['success'] == true;
   }
+
+  Future<bool> homeSpecific(String axis, {String? contextId}) async {
+    final query = contextId != null ? {'contextId': contextId} : null;
+    try {
+      final res = await apiClient.post(
+        ApiEndpoints.homeSpecific,
+        data: {
+          'axis': axis,
+          'axes': axis,
+          if (contextId != null) 'contextId': contextId,
+        },
+        queryParameters: query,
+      );
+      return (res.data as Map<String, dynamic>)['success'] == true;
+    } catch (_) {
+      // Graceful fallback to all axes homing
+      return homeAxes(contextId: contextId);
+    }
+  }
+
+  Future<bool> setPrintSpeed(int speedPercent, {String? contextId}) async {
+    final query = contextId != null ? {'contextId': contextId} : null;
+    final clamped = speedPercent.clamp(10, 300);
+    try {
+      final res = await apiClient.post(
+        ApiEndpoints.speedRate,
+        data: {
+          'speed': clamped,
+          if (contextId != null) 'contextId': contextId,
+        },
+        queryParameters: query,
+      );
+      return (res.data as Map<String, dynamic>)['success'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> setFanSpeed(int fanPercent, {String? contextId}) async {
+    final query = contextId != null ? {'contextId': contextId} : null;
+    final clamped = fanPercent.clamp(0, 100);
+    try {
+      final res = await apiClient.post(
+        ApiEndpoints.fanSpeed,
+        data: {
+          'coolingFan': clamped,
+          if (contextId != null) 'contextId': contextId,
+        },
+        queryParameters: query,
+      );
+      return (res.data as Map<String, dynamic>)['success'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> setCoolingFanSpeed(int fanPercent, {String? contextId}) =>
+      setFanSpeed(fanPercent, contextId: contextId);
 
   Future<bool> clearStatus({String? contextId}) async {
     final query = contextId != null ? {'contextId': contextId} : null;
@@ -260,6 +334,67 @@ class PrinterService {
       queryParameters: query,
     );
     return (res.data as Map<String, dynamic>)['success'] == true;
+  }
+
+  // Spoolman Management
+  Future<bool> clearActiveSpool({String? contextId}) async {
+    final payload = contextId != null ? {'contextId': contextId} : <String, dynamic>{};
+    try {
+      // Primary backend route: DELETE /api/spoolman/select
+      final res = await apiClient.delete(
+        ApiEndpoints.spoolmanSelect,
+        data: payload,
+      );
+      return (res.data as Map<String, dynamic>)['success'] == true;
+    } catch (_) {
+      try {
+        // Fallback route: POST /api/spoolman/clear
+        final res = await apiClient.post(
+          ApiEndpoints.spoolmanClear,
+          data: payload,
+        );
+        return (res.data as Map<String, dynamic>)['success'] == true;
+      } catch (_) {
+        return false;
+      }
+    }
+  }
+
+  Future<bool> selectSpool(int spoolId, {String? contextId}) async {
+    try {
+      final res = await apiClient.post(
+        ApiEndpoints.spoolmanSelect,
+        data: {
+          'spoolId': spoolId,
+          if (contextId != null) 'contextId': contextId,
+        },
+      );
+      return (res.data as Map<String, dynamic>)['success'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> selectSpoolmanSpool(int spoolId, {String? contextId}) =>
+      selectSpool(spoolId, contextId: contextId);
+
+  Future<List<ActiveSpoolData>> searchSpoolmanSpools({String? search}) async {
+    try {
+      final query = search != null && search.trim().isNotEmpty
+          ? {'search': search.trim()}
+          : null;
+      final res = await apiClient.get(
+        ApiEndpoints.spoolmanSpools,
+        queryParameters: query,
+      );
+      final data = res.data;
+      if (data is Map<String, dynamic> && data['spools'] is List) {
+        return (data['spools'] as List)
+            .map((item) => ActiveSpoolData.fromJson(item as Map<String, dynamic>))
+            .toList();
+      }
+    } catch (_) {}
+    return [];
   }
 
   // Watchdog AI
