@@ -26,3 +26,14 @@ Guidelines and rules for AI agents working in this unified repository (`desktop/
 ## Privacy & Local Network Invariants
 - Never commit private IP addresses (`192.168.68.*`, `100.*`, `10.*`) or real Discord webhook URLs to repo code, compose configs, test fixtures, or `.env.example`.
 - Rely on container service networking (`FLASHFORGE_UI_URL=http://yourprinter:3000`) and dynamic printer discovery (`/api/printers/overview`). Keep IP variables empty by default in all `.env.example` templates.
+
+## NAS Deployment & Complete Redeployment Runbook
+- **Target Directory**: `/media/Safe-Storage/Projects/YourPrinter`
+- **Complete Clean Redeploy Command** (Pulls latest code, frees legacy ports, removes orphaned containers, rebuilds, and launches in background):
+  ```bash
+  cd /media/Safe-Storage/Projects/YourPrinter && git pull origin master && docker stop obico-stream-watchdog 2>/dev/null || true; docker compose down --remove-orphans && docker compose up -d --build --remove-orphans
+  ```
+- **Quick Restart Command** (Without rebuilding images):
+  ```bash
+  cd /media/Safe-Storage/Projects/YourPrinter && git pull origin master && docker compose down && docker compose up -d
+  ```
