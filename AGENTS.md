@@ -22,3 +22,7 @@ Guidelines and rules for AI agents working in this unified repository (`desktop/
 
 ## License & Attribution Retention
 - Always preserve all `LICENSE` files and copyright notices (`GhostTypes`, `rolohaun`, `christianborges121`) and upstream attributions (`Parallel-7/FlashForgeUI-Electron` and `rolohaun/FlashForgeUI-Electron-Creator5`) across root, `desktop/`, `web/`, `mobile/`, and `shared/`.
+
+## Privacy & Local Network Invariants
+- Never commit private IP addresses (`192.168.68.*`, `100.*`, `10.*`) or real Discord webhook URLs to repo code, compose configs, test fixtures, or `.env.example`.
+- Rely on container service networking (`FLASHFORGE_UI_URL=http://yourprinter:3000`) and dynamic printer discovery (`/api/printers/overview`). Keep IP variables empty by default in all `.env.example` templates.
