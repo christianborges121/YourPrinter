@@ -41,6 +41,8 @@ class ApiEndpoints {
   static const String tempBedOff = '/api/printer/temperature/bed/off';
   static const String tempExtruder = '/api/printer/temperature/extruder';
   static const String tempExtruderOff = '/api/printer/temperature/extruder/off';
+  static const String tempChamber = '/api/printer/temperature/chamber';
+  static const String tempChamberOff = '/api/printer/temperature/chamber/off';
 
   // Filtration
   static const String filtrationExternal = '/api/printer/filtration/external';

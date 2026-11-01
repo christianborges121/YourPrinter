@@ -302,23 +302,24 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
     const startTime = Date.now();
 
     try {
+      // Chamber heating (M141) on FlashForge printers is always controlled via HTTP temperatureCtl_cmd
+      const chamberMatch = command.match(/M141\s+S(-?\d+)/i);
+      if (chamberMatch) {
+        const chamberTemp = parseInt(chamberMatch[1], 10);
+        const ok = await this.sendHttpTemperatureCommand({ chamber: chamberTemp });
+        return {
+          success: ok,
+          command,
+          response: ok ? 'ok' : 'error',
+          executionTime: Date.now() - startTime,
+          timestamp: new Date(),
+        };
+      }
+
       if (!this.legacyClient) {
-        // Handle M140 (bed), M104 (extruder), and M141 (chamber) via HTTP temperatureCtl_cmd
+        // Handle M140 (bed) and M104 (extruder) via HTTP temperatureCtl_cmd
         const bedMatch = command.match(/M140\s+S(-?\d+)/i);
         const nozzleMatch = command.match(/M104(?:\s+T(\d+))?\s+S(-?\d+)|M104\s+S(-?\d+)(?:\s+T(\d+))?/i);
-        const chamberMatch = command.match(/M141\s+S(-?\d+)/i);
-
-        if (chamberMatch) {
-          const chamberTemp = parseInt(chamberMatch[1], 10);
-          const ok = await this.sendHttpTemperatureCommand({ chamber: chamberTemp });
-          return {
-            success: ok,
-            command,
-            response: ok ? 'ok' : 'error',
-            executionTime: Date.now() - startTime,
-            timestamp: new Date(),
-          };
-        }
 
         if (bedMatch) {
           const bedTemp = parseInt(bedMatch[1], 10);
@@ -1517,14 +1518,21 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
       const serialNumber =
         this.serialNumber ||
         (this.printerDetails?.serialNumber as string) ||
+        (this.printerDetails?.SerialNumber as string) ||
+        (this.printerDetails?.SN as string) ||
         (this.fiveMClient as unknown as { serialNumber?: string })?.serialNumber ||
         '';
       const checkCode =
         this.checkCode ||
         (this.printerDetails?.checkCode as string) ||
+        (this.printerDetails?.CheckCode as string) ||
         (this.fiveMClient as unknown as { checkCode?: string })?.checkCode ||
         '';
-      const ip = this.ipAddress || (this.printerDetails?.ipAddress as string) || '';
+      const ip =
+        this.ipAddress ||
+        (this.printerDetails?.ipAddress as string) ||
+        (this.printerDetails?.IPAddress as string) ||
+        '';
 
       const res = await fetch(`http://${ip}:8898/control`, {
         method: 'POST',

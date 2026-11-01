@@ -35,7 +35,20 @@ Future<double?> showTempSetpointDialog({
                 label: const Text('Off (0°C)'),
                 onPressed: () => controller.text = '0',
               ),
-              if (maxTemp > 200) ...[
+              if (title.toLowerCase().contains('chamber')) ...[
+                ActionChip(
+                  label: const Text('Warm (40°C)'),
+                  onPressed: () => controller.text = '40',
+                ),
+                ActionChip(
+                  label: const Text('ABS/ASA (50°C)'),
+                  onPressed: () => controller.text = '50',
+                ),
+                ActionChip(
+                  label: const Text('Nylon/PC (60°C)'),
+                  onPressed: () => controller.text = '60',
+                ),
+              ] else if (maxTemp > 200) ...[
                 ActionChip(
                   label: const Text('PLA (210°C)'),
                   onPressed: () => controller.text = '210',
