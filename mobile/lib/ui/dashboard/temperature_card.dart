@@ -35,6 +35,19 @@ class TemperatureCard extends ConsumerWidget {
     final status = telemetryState.status!;
     final bool hasMultipleTools = status.toolTemps.length > 1;
 
+    final modelStr = (activeContext?.model ?? '').toLowerCase();
+    final nameStr = (activeContext?.name ?? '').toLowerCase();
+    final bool isCreator5 = modelStr.contains('creator') ||
+        nameStr.contains('creator') ||
+        (modelStr.contains('ad5x') && nameStr.contains('c5'));
+
+    final capabilities = telemetryState.features?.capabilities;
+    final bool hasChamberHeater = isCreator5 ||
+        (capabilities?.hasChamberHeater ??
+            (status.chamberTemperature != null && status.chamberTemperature! > 0));
+    final double maxChamberTemp =
+        capabilities?.maxChamberTemp ?? (isCreator5 ? 80.0 : 60.0);
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -134,10 +147,10 @@ class TemperatureCard extends ConsumerWidget {
             ],
 
             // Chamber Row (if supported)
-            if ((status.chamberTemperature != null && status.chamberTemperature! > 0) ||
-                (status.chamberTargetTemperature != null && status.chamberTargetTemperature! > 0)) ...[
+            if (hasChamberHeater) ...[
               const Divider(height: 16),
               _buildTempRow(
+                key: const Key('temp_row_chamber'),
                 context: context,
                 icon: LucideIcons.box,
                 iconColor: AppColors.chamber,
@@ -149,7 +162,7 @@ class TemperatureCard extends ConsumerWidget {
                     context: context,
                     title: 'Set Chamber Temperature',
                     currentVal: status.chamberTargetTemperature ?? 0.0,
-                    maxTemp: 80,
+                    maxTemp: maxChamberTemp,
                   );
                   if (target != null) {
                     if (target == 0) {
@@ -168,6 +181,7 @@ class TemperatureCard extends ConsumerWidget {
   }
 
   Widget _buildTempRow({
+    Key? key,
     required BuildContext context,
     required IconData icon,
     required Color iconColor,
@@ -179,6 +193,7 @@ class TemperatureCard extends ConsumerWidget {
     final bool isHeating = targetTemp > 0 && currentTemp < (targetTemp - 2);
 
     return InkWell(
+      key: key,
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Padding(
