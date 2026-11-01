@@ -23,6 +23,18 @@ Guidelines and rules for AI agents working in this unified repository (`desktop/
 ## License & Attribution Retention
 - Always preserve all `LICENSE` files and copyright notices (`GhostTypes`, `rolohaun`, `christianborges121`) and upstream attributions (`Parallel-7/FlashForgeUI-Electron` and `rolohaun/FlashForgeUI-Electron-Creator5`) across root, `desktop/`, `web/`, `mobile/`, and `shared/`.
 
+## Dual-Frontend Feature Parity Invariant (WebUI & Mobile)
+1. **Simultaneous Multi-Client Implementation**:
+   - WebUI (`web/`) and Mobile (`mobile/`) are co-equal first-class frontends.
+   - Any feature, control, setting, or telemetry display added or updated in the backend (`desktop/`) or WebUI (`web/`) (e.g., speed rate controls, chamber temperature, fan toggles, hardware options) **must simultaneously be implemented in Flutter Mobile (`mobile/`)** in the exact same phase/feature branch.
+   - Never mark a feature complete or close a task if the functionality is only delivered to WebUI and left absent from Mobile.
+2. **Contract Synchronization**:
+   - Any update to `shared/types/web-api.types.ts` or WebSocket/REST schemas must immediately be mirrored in the corresponding Dart models (`mobile/lib/core/models/`) and API/WebSocket services (`mobile/lib/core/services/`).
+3. **Verification Checklist**:
+   - Every feature completion milestone must verify:
+     - **WebUI**: Build succeeds (`npm run build`), components render properly, and interactions fire expected API calls.
+     - **Mobile**: Static analysis passes (`flutter analyze`), widget/screen UI mirrors the controls, and telemetry parses without missing fields.
+
 ## Privacy & Local Network Invariants
 - Never commit private IP addresses (`192.168.68.*`, `100.*`, `10.*`) or real Discord webhook URLs to repo code, compose configs, test fixtures, or `.env.example`.
 - Rely on container service networking (`FLASHFORGE_UI_URL=http://yourprinter:3000`) and dynamic printer discovery (`/api/printers/overview`). Keep IP variables empty by default in all `.env.example` templates.
