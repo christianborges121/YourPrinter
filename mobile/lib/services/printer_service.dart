@@ -200,6 +200,22 @@ class PrinterService {
     return (res.data as Map<String, dynamic>)['success'] == true;
   }
 
+  Future<bool> setChamberTemp(double temp, {String? contextId}) async {
+    final query = contextId != null ? {'contextId': contextId} : null;
+    final res = await apiClient.post(
+      ApiEndpoints.tempChamber,
+      data: {'temperature': temp},
+      queryParameters: query,
+    );
+    return (res.data as Map<String, dynamic>)['success'] == true;
+  }
+
+  Future<bool> setChamberOff({String? contextId}) async {
+    final query = contextId != null ? {'contextId': contextId} : null;
+    final res = await apiClient.post(ApiEndpoints.tempChamberOff, queryParameters: query);
+    return (res.data as Map<String, dynamic>)['success'] == true;
+  }
+
   // Filtration
   Future<bool> setFiltration(String mode, {String? contextId}) async {
     final query = contextId != null ? {'contextId': contextId} : null;

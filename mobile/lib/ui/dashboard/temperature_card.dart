@@ -134,16 +134,31 @@ class TemperatureCard extends ConsumerWidget {
             ],
 
             // Chamber Row (if supported)
-            if (status.chamberTemperature != null && status.chamberTemperature! > 0) ...[
+            if ((status.chamberTemperature != null && status.chamberTemperature! > 0) ||
+                (status.chamberTargetTemperature != null && status.chamberTargetTemperature! > 0)) ...[
               const Divider(height: 16),
               _buildTempRow(
                 context: context,
                 icon: LucideIcons.box,
                 iconColor: AppColors.chamber,
                 label: 'Chamber',
-                currentTemp: status.chamberTemperature!,
+                currentTemp: status.chamberTemperature ?? 0.0,
                 targetTemp: status.chamberTargetTemperature ?? 0.0,
-                onTap: null,
+                onTap: () async {
+                  final target = await showTempSetpointDialog(
+                    context: context,
+                    title: 'Set Chamber Temperature',
+                    currentVal: status.chamberTargetTemperature ?? 0.0,
+                    maxTemp: 80,
+                  );
+                  if (target != null) {
+                    if (target == 0) {
+                      await printerService.setChamberOff(contextId: activeContext?.contextId);
+                    } else {
+                      await printerService.setChamberTemp(target, contextId: activeContext?.contextId);
+                    }
+                  }
+                },
               ),
             ],
           ],
