@@ -120,6 +120,32 @@ jobs:
               with open(settings_path, "w", encoding="utf-8") as f:
                   f.write(updated_settings)
 
+          # Update version in WebUI settings screen
+          web_settings_path = "../web/src/components/settings/SettingsScreen.tsx"
+          if os.path.exists(web_settings_path):
+              with open(web_settings_path, "r", encoding="utf-8") as f:
+                  web_content = f.read()
+              updated_web = re.sub(
+                  r"v[0-9.]+\s*•\s*YourWay",
+                  f"v{version_tag} • YourWay",
+                  web_content
+              )
+              with open(web_settings_path, "w", encoding="utf-8") as f:
+                  f.write(updated_web)
+
+          # Update desktop and web package.json versions
+          for pkg_path in ["../desktop/package.json", "../web/package.json"]:
+              if os.path.exists(pkg_path):
+                  with open(pkg_path, "r", encoding="utf-8") as f:
+                      pkg_content = f.read()
+                  updated_pkg = re.sub(
+                      r'("version":\s*")[0-9.]+"',
+                      f'\\g<1>{version_tag}"',
+                      pkg_content
+                  )
+                  with open(pkg_path, "w", encoding="utf-8") as f:
+                      f.write(updated_pkg)
+
           apk_name = f"YourPrinter-v{version_tag}.apk"
           print(f"Target App Version: {version_tag} (Full: {full_version})")
           print(f"Target APK Name: {apk_name}")
@@ -138,8 +164,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if ! git diff --quiet pubspec.yaml lib/ui/settings/settings_screen.dart; then
-            git add pubspec.yaml lib/ui/settings/settings_screen.dart
+          if ! git diff --quiet pubspec.yaml lib/ui/settings/settings_screen.dart ../web/ ../desktop/; then
+            git add pubspec.yaml lib/ui/settings/settings_screen.dart ../web/src/components/settings/SettingsScreen.tsx ../desktop/package.json ../web/package.json
             git commit -m "chore(release): bump version to ${{ env.APP_VERSION }} [skip ci]"
             git push origin master
           else
