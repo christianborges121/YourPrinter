@@ -69,15 +69,15 @@ export const JobProgressCard: React.FC = () => {
   };
 
   return (
-    <div className="bg-[#1E1E1E] border border-[#2E2E2E] rounded-xl p-3.5 shadow-sm flex flex-col gap-3">
-      {/* Top Header Row: Job Name & Status Badge */}
-      <div className="flex items-start justify-between gap-3">
+    <div className="bg-[#1E1E1E] border border-[#2E2E2E] rounded-xl p-3 shadow-sm flex flex-col gap-2.5">
+      {/* Top Header Row: Job Name, Printer Model, Status Badge, and Compact Actions */}
+      <div className="flex items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 text-[#F3F4F6] font-bold text-base sm:text-lg truncate">
-            <FileText size={18} className="text-[#00AE42] shrink-0" />
+          <div className="flex items-center gap-1.5 text-[#F3F4F6] font-bold text-sm sm:text-base truncate">
+            <FileText size={16} className="text-[#00AE42] shrink-0" />
             <span className="truncate">{status.jobName || 'No Active Print Job'}</span>
           </div>
-          <p className="text-xs text-[#94A3B8] mt-0.5 truncate">
+          <p className="text-[11px] text-[#94A3B8] mt-0.5 truncate">
             {activeContext
               ? activeContext.name.toLowerCase() === activeContext.model.toLowerCase()
                 ? activeContext.name
@@ -86,37 +86,46 @@ export const JobProgressCard: React.FC = () => {
           </p>
         </div>
 
-        <StatusBadge
-          statusText={status.printerState}
-          isPrinting={isPrinting}
-          isCompleted={isCompleted}
-        />
+        <div className="flex items-center gap-2 shrink-0">
+          <StatusBadge
+            statusText={status.printerState}
+            isPrinting={isPrinting}
+            isCompleted={isCompleted}
+          />
+
+          {/* Quick Header Actions: Pause/Resume & Cancel (compacted to save a whole button row) */}
+          {isJobActive && (
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={handlePauseResume}
+                disabled={isBusy}
+                title={isPaused ? 'Resume Job' : 'Pause Job'}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all border ${
+                  isPaused
+                    ? 'bg-[#00AE42] hover:bg-[#009638] text-white border-[#00AE42]'
+                    : 'bg-[#262626] hover:bg-[#333333] text-[#F3F4F6] border-[#2E2E2E]'
+                }`}
+              >
+                {isPaused ? <Play size={13} /> : <Pause size={13} />}
+                <span className="hidden sm:inline">{isPaused ? 'Resume' : 'Pause'}</span>
+              </button>
+
+              <button
+                onClick={() => setConfirmCancelOpen(true)}
+                disabled={isBusy}
+                title="Cancel Print"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#EF4444]/15 hover:bg-[#EF4444]/25 text-[#EF4444] border border-[#EF4444]/30 transition-all"
+              >
+                <Square size={13} />
+                <span className="hidden sm:inline">Cancel</span>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Hero Progress Area */}
-      <div className="flex items-end justify-between">
-        <div>
-          <span className="text-3xl sm:text-4xl font-extrabold tracking-tight text-[#F3F4F6]">
-            {progress.toFixed(0)}%
-          </span>
-          <span className="text-xs text-[#94A3B8] ml-2 font-medium">Completed</span>
-        </div>
-
-        {/* Layer Count */}
-        <div className="flex items-center gap-1.5 text-xs text-[#D1D5DB] bg-[#262626] px-2.5 py-1 rounded-lg border border-[#2E2E2E]">
-          <Layers size={13} className="text-[#00AE42]" />
-          <span>
-            Layer{' '}
-            <strong className="text-[#F3F4F6]">
-              {status.currentLayer ?? 0}
-            </strong>{' '}
-            / {status.totalLayers ?? '--'}
-          </span>
-        </div>
-      </div>
-
-      {/* Animated Linear Progress Bar */}
-      <div className="w-full bg-[#2E2E2E] h-2.5 rounded-full overflow-hidden">
+      {/* Hero Progress Bar */}
+      <div className="w-full bg-[#2E2E2E] h-2 rounded-full overflow-hidden">
         <div
           className={`h-full transition-all duration-500 rounded-full ${
             isCompleted
@@ -129,61 +138,44 @@ export const JobProgressCard: React.FC = () => {
         />
       </div>
 
-      {/* Time & ETA Metadata Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 py-1 border-y border-[#2E2E2E] text-xs">
-        <div className="flex flex-col">
-          <span className="text-[#94A3B8] flex items-center gap-1">
-            <Clock size={12} /> Time Left
+      {/* Compact Metrics Row: % + ETA (Left) and Layers + Elapsed + Filament (Right) */}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs">
+        <div className="flex items-baseline gap-2">
+          <span className="text-xl sm:text-2xl font-black text-[#F3F4F6] tracking-tight">
+            {progress.toFixed(0)}%
           </span>
-          <span className="font-semibold text-[#F3F4F6] mt-0.5">
+          <span className="text-[#94A3B8] font-medium flex items-center gap-1">
+            <Clock size={12} className="text-[#94A3B8]" />
             {isCompleted ? 'Done' : (status.formattedEta || formatTime(status.timeRemaining))}
           </span>
         </div>
 
-        <div className="flex flex-col">
-          <span className="text-[#94A3B8] flex items-center gap-1">
-            <Clock size={12} /> Elapsed
-          </span>
-          <span className="font-semibold text-[#F3F4F6] mt-0.5">
-            {formatTime(status.elapsedTimeSeconds || status.timeElapsed)}
-          </span>
-        </div>
+        <div className="flex items-center gap-3 text-xs text-[#D1D5DB]">
+          <div className="flex items-center gap-1 bg-[#262626] px-2 py-0.5 rounded border border-[#2E2E2E]">
+            <Layers size={12} className="text-[#00AE42]" />
+            <span>
+              Layer <strong className="text-[#F3F4F6]">{status.currentLayer ?? 0}</strong> / {status.totalLayers ?? '--'}
+            </span>
+          </div>
 
-        <div className="flex flex-col col-span-2 sm:col-span-1">
-          <span className="text-[#94A3B8]">Filament Est.</span>
-          <span className="font-semibold text-[#F3F4F6] mt-0.5">
-            {status.estimatedLength ? `${(status.estimatedLength / 1000).toFixed(1)}m` : '--'}
-            {status.estimatedWeight ? ` (${status.estimatedWeight.toFixed(0)}g)` : ''}
-          </span>
+          <div className="flex items-center gap-1 text-[#94A3B8]">
+            <span>Elapsed:</span>
+            <span className="font-semibold text-[#F3F4F6]">
+              {formatTime(status.elapsedTimeSeconds || status.timeElapsed)}
+            </span>
+          </div>
+
+          {(status.estimatedLength || status.estimatedWeight) && (
+            <div className="hidden sm:flex items-center gap-1 text-[#94A3B8]">
+              <span>Filament:</span>
+              <span className="font-semibold text-[#F3F4F6]">
+                {status.estimatedLength ? `${(status.estimatedLength / 1000).toFixed(1)}m` : ''}
+                {status.estimatedWeight ? ` (${status.estimatedWeight.toFixed(0)}g)` : ''}
+              </span>
+            </div>
+          )}
         </div>
       </div>
-
-      {/* Control Buttons: Pause / Resume & Cancel */}
-      {isJobActive && (
-        <div className="flex items-center gap-3 pt-1">
-          <button
-            onClick={handlePauseResume}
-            disabled={isBusy}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg font-semibold text-xs sm:text-sm transition-all ${
-              isPaused
-                ? 'bg-[#00AE42] hover:bg-[#009638] text-white shadow-md'
-                : 'bg-[#262626] hover:bg-[#383838] text-[#F3F4F6] border border-[#2E2E2E]'
-            }`}
-          >
-            {isPaused ? <Play size={15} /> : <Pause size={15} />}
-            <span>{isPaused ? 'Resume Job' : 'Pause Job'}</span>
-          </button>
-
-          <button
-            onClick={() => setConfirmCancelOpen(true)}
-            disabled={isBusy}
-            className="flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg font-semibold text-xs sm:text-sm bg-[#EF4444]/15 hover:bg-[#EF4444]/25 text-[#EF4444] border border-[#EF4444]/30 transition-all"
-          >
-            <Square size={15} />
-            <span>Cancel Print</span>
-          </button>
-        </div>
-      )}
 
       {/* Cancel Confirmation Dialog */}
       <ConfirmModal

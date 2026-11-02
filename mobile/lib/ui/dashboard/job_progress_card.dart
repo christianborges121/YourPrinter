@@ -20,26 +20,26 @@ class JobProgressCard extends ConsumerWidget {
     if (telemetryState.isLoading || telemetryState.status == null) {
       return const Card(
         child: Padding(
-          padding: EdgeInsets.all(16),
+          padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  SkeletonShimmer(width: 80, height: 18),
+                  SkeletonShimmer(width: 80, height: 16),
                   Spacer(),
-                  SkeletonShimmer(width: 60, height: 18),
+                  SkeletonShimmer(width: 60, height: 16),
                 ],
               ),
-              SizedBox(height: 14),
-              SkeletonShimmer(width: double.infinity, height: 8),
-              SizedBox(height: 14),
+              SizedBox(height: 10),
+              SkeletonShimmer(width: double.infinity, height: 6),
+              SizedBox(height: 10),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  SkeletonShimmer(width: 70, height: 14),
-                  SkeletonShimmer(width: 70, height: 14),
-                  SkeletonShimmer(width: 70, height: 14),
+                  SkeletonShimmer(width: 70, height: 12),
+                  SkeletonShimmer(width: 70, height: 12),
+                  SkeletonShimmer(width: 70, height: 12),
                 ],
               ),
             ],
@@ -54,11 +54,11 @@ class JobProgressCard extends ConsumerWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Top Row: Job Title & Status Badge
+            // Top Row: Job Title, Status Badge, & Header Action Buttons
             Row(
               children: [
                 Expanded(
@@ -70,7 +70,7 @@ class JobProgressCard extends ConsumerWidget {
                             ? status.jobName!
                             : 'No Active Print Job',
                         style: const TextStyle(
-                          fontSize: 15,
+                          fontSize: 14,
                           fontWeight: FontWeight.bold,
                           color: AppColors.textPrimary,
                         ),
@@ -80,7 +80,7 @@ class JobProgressCard extends ConsumerWidget {
                       const SizedBox(height: 2),
                       Text(
                         activeContext != null ? '${activeContext.name} (${activeContext.model})' : '3D Printer',
-                        style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                        style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
                       ),
                     ],
                   ),
@@ -90,16 +90,63 @@ class JobProgressCard extends ConsumerWidget {
                   isPrinting: isPrinting,
                   isCompleted: isCompleted,
                 ),
+                if (status.hasActiveJob) ...[
+                  const SizedBox(width: 6),
+                  IconButton(
+                    iconSize: 16,
+                    padding: const EdgeInsets.all(4),
+                    constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                    onPressed: () async {
+                      if (status.isPaused) {
+                        await printerService.resumeJob(contextId: activeContext?.contextId);
+                      } else {
+                        await printerService.pauseJob(contextId: activeContext?.contextId);
+                      }
+                    },
+                    icon: Icon(
+                      status.isPaused ? LucideIcons.play : LucideIcons.pause,
+                      color: status.isPaused ? AppColors.accentGreen : AppColors.textPrimary,
+                    ),
+                    tooltip: status.isPaused ? 'Resume' : 'Pause',
+                  ),
+                  IconButton(
+                    iconSize: 16,
+                    padding: const EdgeInsets.all(4),
+                    constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                    onPressed: () async {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Cancel Print?'),
+                          content: const Text('Are you sure you want to cancel the active print job?'),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('No')),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+                              onPressed: () => Navigator.of(ctx).pop(true),
+                              child: const Text('Cancel Print'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm == true) {
+                        await printerService.cancelJob(contextId: activeContext?.contextId);
+                      }
+                    },
+                    icon: const Icon(LucideIcons.square, color: AppColors.error),
+                    tooltip: 'Cancel',
+                  ),
+                ],
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 10),
 
             // Progress Bar
             ClipRRect(
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(3),
               child: LinearProgressIndicator(
                 value: (status.progress / 100.0).clamp(0.0, 1.0),
-                minHeight: 8,
+                minHeight: 6,
                 backgroundColor: AppColors.border,
                 valueColor: AlwaysStoppedAnimation<Color>(
                   isCompleted ? AppColors.info : AppColors.accentGreen,
@@ -108,186 +155,90 @@ class JobProgressCard extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
 
-            // Metrics Row: % | Layers | Time Remaining
+            // Primary Metrics Row: % & Time Remaining (Left) and Layer (Right)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  '${status.progress.toStringAsFixed(1)}%',
-                  style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary, fontSize: 13),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${status.progress.toStringAsFixed(1)}%',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary, fontSize: 13),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      status.timeRemaining != null
+                          ? _formatSeconds(status.timeRemaining!)
+                          : (status.formattedEta ?? '--:--'),
+                      style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                    ),
+                  ],
                 ),
                 Text(
                   'Layer ${status.currentLayer} / ${status.totalLayers}',
-                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                ),
-                Text(
-                  status.timeRemaining != null
-                      ? _formatSeconds(status.timeRemaining!)
-                      : (status.formattedEta ?? '--:--'),
-                  style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
                 ),
               ],
             ),
+            const SizedBox(height: 6),
 
-            // Metadata Grid: Time Left, Elapsed, Filament Est.
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceSecondary,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Row(
-                          children: [
-                            Icon(LucideIcons.clock, size: 12, color: AppColors.textMuted),
-                            SizedBox(width: 4),
-                            Text('Time Left', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          status.timeRemaining != null
-                              ? _formatDuration(status.timeRemaining!)
-                              : (status.formattedEta ?? '--'),
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                        ),
-                      ],
+            // Secondary Stats Strip: Elapsed & Filament Est.
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Elapsed', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                    const SizedBox(width: 4),
+                    Text(
+                      _formatDuration(status.elapsedTimeSeconds > 0 ? status.elapsedTimeSeconds : (status.timeElapsed ?? 0)),
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
                     ),
+                  ],
+                ),
+                if (status.estimatedLength != null || status.estimatedWeight != null)
+                  Text(
+                    '${status.estimatedLength != null ? "${(status.estimatedLength! / 1000).toStringAsFixed(1)}m" : ""}${status.estimatedWeight != null ? " (${status.estimatedWeight!.toStringAsFixed(0)}g)" : ""}',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
                   ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Row(
-                          children: [
-                            Icon(LucideIcons.timer, size: 12, color: AppColors.textMuted),
-                            SizedBox(width: 4),
-                            Text('Elapsed', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          _formatDuration(status.elapsedTimeSeconds > 0 ? status.elapsedTimeSeconds : (status.timeElapsed ?? 0)),
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (status.estimatedLength != null || status.estimatedWeight != null)
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Filament Est.', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
-                          const SizedBox(height: 2),
-                          Text(
-                            '${status.estimatedLength != null ? "${(status.estimatedLength! / 1000).toStringAsFixed(1)}m" : ""}${status.estimatedWeight != null ? " (${status.estimatedWeight!.toStringAsFixed(0)}g)" : ""}',
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
+              ],
             ),
 
             // Completed Banner with Clear Action
             if (isCompleted) ...[
-              const SizedBox(height: 14),
+              const SizedBox(height: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: AppColors.infoSubtle,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(6),
                   border: Border.all(color: AppColors.info.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(LucideIcons.checkCircle2, size: 16, color: AppColors.info),
-                    const SizedBox(width: 8),
+                    const Icon(LucideIcons.checkCircle2, size: 14, color: AppColors.info),
+                    const SizedBox(width: 6),
                     const Expanded(
                       child: Text(
                         'Print finished successfully!',
-                        style: TextStyle(fontSize: 12, color: AppColors.textPrimary),
+                        style: TextStyle(fontSize: 11, color: AppColors.textPrimary),
                       ),
                     ),
                     OutlinedButton(
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         minimumSize: Size.zero,
                       ),
                       onPressed: () async {
                         await printerService.clearStatus(contextId: activeContext?.contextId);
                         ref.read(telemetryProvider.notifier).fetchStatus(contextId: activeContext?.contextId);
                       },
-                      child: const Text('Dismiss', style: TextStyle(fontSize: 11)),
+                      child: const Text('Dismiss', style: TextStyle(fontSize: 10)),
                     ),
                   ],
                 ),
-              ),
-            ],
-
-            // Job Control Buttons (Pause / Resume / Cancel) when printing
-            if (status.hasActiveJob) ...[
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () async {
-                        if (status.isPaused) {
-                          await printerService.resumeJob(contextId: activeContext?.contextId);
-                        } else {
-                          await printerService.pauseJob(contextId: activeContext?.contextId);
-                        }
-                      },
-                      icon: Icon(
-                        status.isPaused ? LucideIcons.play : LucideIcons.pause,
-                        size: 14,
-                      ),
-                      label: Text(
-                        status.isPaused ? 'Resume' : 'Pause',
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(foregroundColor: AppColors.error),
-                      onPressed: () async {
-                        final confirm = await showDialog<bool>(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            title: const Text('Cancel Print?'),
-                            content: const Text('Are you sure you want to cancel the active print job?'),
-                            actions: [
-                              TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('No')),
-                              ElevatedButton(
-                                style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-                                onPressed: () => Navigator.of(ctx).pop(true),
-                                child: const Text('Cancel Print'),
-                              ),
-                            ],
-                          ),
-                        );
-                        if (confirm == true) {
-                          await printerService.cancelJob(contextId: activeContext?.contextId);
-                        }
-                      },
-                      icon: const Icon(LucideIcons.square, size: 14),
-                      label: const Text('Stop', style: TextStyle(fontSize: 12)),
-                    ),
-                  ),
-                ],
               ),
             ],
           ],
