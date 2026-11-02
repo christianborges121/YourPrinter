@@ -141,7 +141,7 @@ const AppContent: React.FC = () => {
       />
 
       {/* Main View Area with Error Boundary */}
-      <main className="flex-1 p-4 sm:p-6 max-w-7xl mx-auto w-full">
+      <main className="flex-1 p-4 sm:p-6 max-w-7xl mx-auto w-full pb-16 sm:pb-6">
         <ErrorBoundary
           fallbackTitle={`Error displaying ${activeTab.toUpperCase()} view`}
           onReset={() => handleTabChange('device')}

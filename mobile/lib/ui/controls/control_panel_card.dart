@@ -182,14 +182,39 @@ class _ControlPanelCardState extends ConsumerState<ControlPanelCard>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(LucideIcons.sliders, size: 16, color: AppColors.info),
-                SizedBox(width: 8),
-                Text(
+                const Icon(LucideIcons.sliders, size: 16, color: AppColors.info),
+                const SizedBox(width: 8),
+                const Text(
                   'Hardware Controls',
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
                 ),
+                const Spacer(),
+                if (features?.hasLED ?? true)
+                  InkWell(
+                    key: const Key('led_toggle_btn'),
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () async {
+                      setState(() => _ledOn = !_ledOn);
+                      await printerService.setLED(_ledOn, contextId: activeContext?.contextId);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: _ledOn ? AppColors.warningSubtle : AppColors.surface,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: _ledOn ? AppColors.warning.withValues(alpha: 0.5) : AppColors.border,
+                        ),
+                      ),
+                      child: Icon(
+                        _ledOn ? LucideIcons.lightbulb : LucideIcons.lightbulbOff,
+                        size: 16,
+                        color: _ledOn ? AppColors.warning : AppColors.textMuted,
+                      ),
+                    ),
+                  ),
               ],
             ),
             const SizedBox(height: 12),
@@ -498,38 +523,17 @@ class _ControlPanelCardState extends ConsumerState<ControlPanelCard>
 
             const SizedBox(height: 12),
 
-            Row(
-              children: [
-                // LED Toggle
-                if (features?.hasLED ?? true) ...[
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: _ledOn ? AppColors.warning : AppColors.textMuted,
-                      ),
-                      onPressed: () async {
-                        setState(() => _ledOn = !_ledOn);
-                        await printerService.setLED(_ledOn, contextId: activeContext?.contextId);
-                      },
-                      icon: Icon(_ledOn ? LucideIcons.lightbulb : LucideIcons.lightbulbOff, size: 14),
-                      label: Text(_ledOn ? 'LED: On' : 'LED: Off', style: const TextStyle(fontSize: 12)),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-
-                // Clear / Reset Status
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      await printerService.clearStatus(contextId: activeContext?.contextId);
-                      ref.read(telemetryProvider.notifier).fetchStatus(contextId: activeContext?.contextId);
-                    },
-                    icon: const Icon(LucideIcons.rotateCcw, size: 14),
-                    label: const Text('Clear Status', style: TextStyle(fontSize: 12)),
-                  ),
-                ),
-              ],
+            // Clear / Reset Status
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  await printerService.clearStatus(contextId: activeContext?.contextId);
+                  ref.read(telemetryProvider.notifier).fetchStatus(contextId: activeContext?.contextId);
+                },
+                icon: const Icon(LucideIcons.rotateCcw, size: 14),
+                label: const Text('Clear Status', style: TextStyle(fontSize: 12)),
+              ),
             ),
 
             // Filtration (for AD5M Pro / Creator 5 Pro with filtration)

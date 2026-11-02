@@ -304,14 +304,11 @@ void main() {
       expect(find.text('gear_bearing_v2.gcode'), findsOneWidget);
       expect(find.text('68.5%'), findsOneWidget);
       expect(find.text('Layer 250 / 365'), findsOneWidget);
-      expect(find.byKey(const Key('job_speed_quick_bar')), findsOneWidget);
-      expect(find.byKey(const Key('job_speed_preset_50')), findsOneWidget);
-      expect(find.byKey(const Key('job_speed_preset_100')), findsOneWidget);
-      expect(find.byKey(const Key('job_speed_preset_140')), findsOneWidget);
+      expect(find.byKey(const Key('job_speed_quick_bar')), findsNothing);
       expect(find.text('Elapsed'), findsOneWidget);
     });
 
-    testWidgets('JobProgressCard tapping speed preset dispatches setPrintSpeed', (WidgetTester tester) async {
+    testWidgets('JobProgressCard renders filament estimate without duplicate speed bar', (WidgetTester tester) async {
       final mockService = MockPrinterService();
       const mockStatus = PrinterStatusData(
         printerState: 'PRINTING',
@@ -344,9 +341,7 @@ void main() {
       );
 
       expect(find.text('2.5m (8g)'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('job_speed_preset_140')));
-      await tester.pump();
-      expect(mockService.lastSpeedSet, 140);
+      expect(find.byKey(const Key('job_speed_quick_bar')), findsNothing);
     });
 
     testWidgets('ConnectionErrorCard displays generic friendly message and expands to show true message', (WidgetTester tester) async {

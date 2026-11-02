@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sliders, Move, Home, Lightbulb, Wind, Fan, Thermometer, Gauge } from 'lucide-react';
+import { Sliders, Move, Home, Lightbulb, LightbulbOff, Wind, Fan, Gauge } from 'lucide-react';
 import { usePrinter } from '../../context/PrinterContext';
 import { JogModal } from '../modals/JogModal';
 
@@ -90,57 +90,64 @@ export const ControlPanelCard: React.FC = () => {
   };
 
   return (
-    <div className="bg-[#1E1E1E] border border-[#2E2E2E] rounded-xl p-5 shadow-sm flex flex-col gap-4">
+    <div className="bg-[#1E1E1E] border border-[#2E2E2E] rounded-xl p-3.5 shadow-sm flex flex-col gap-3">
       {/* Header */}
-      <div className="flex items-center justify-between pb-2 border-b border-[#2E2E2E]">
-        <div className="flex items-center gap-2">
-          <Sliders size={16} className="text-[#3B82F6]" />
-          <span className="text-sm font-semibold text-[#F3F4F6]">Hardware Controls</span>
+      <div className="flex items-center justify-between pb-1.5 border-b border-[#2E2E2E]">
+        <div className="flex items-center gap-1.5">
+          <Sliders size={15} className="text-[#3B82F6]" />
+          <span className="text-xs font-semibold uppercase tracking-wider text-[#94A3B8]">Hardware Controls</span>
         </div>
 
-        {/* Chamber Temperature display if available */}
-        {status?.chamberTemperature !== undefined && status.chamberTemperature > 0 && (
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[#8B5CF6]/10 border border-[#8B5CF6]/30 text-[11px] font-semibold text-[#A78BFA]">
-            <Thermometer size={12} className="text-[#8B5CF6]" />
-            <span>Chamber: {Math.round(status.chamberTemperature)}°C</span>
-            {status.chamberTargetTemperature && status.chamberTargetTemperature > 0 && (
-              <span className="text-[#C4B5FD]">/ {status.chamberTargetTemperature}°C</span>
-            )}
-          </div>
+        {/* Single Chamber Lightbulb Icon Toggle */}
+        {hasLedControl && (
+          <button
+            onClick={handleToggleLed}
+            aria-label={ledState ? 'Turn Chamber Light Off' : 'Turn Chamber Light On'}
+            title={ledState ? 'Chamber Light: ON (Click to turn off)' : 'Chamber Light: OFF (Click to turn on)'}
+            className={`p-1.5 rounded-lg border transition-all ${
+              ledState
+                ? 'bg-[#F59E0B]/20 border-[#F59E0B]/50 text-[#F59E0B] shadow-[0_0_8px_rgba(245,158,11,0.25)]'
+                : 'bg-[#262626] border-[#2E2E2E] text-[#64748B] hover:text-[#94A3B8]'
+            }`}
+          >
+            {ledState ? <Lightbulb size={15} /> : <LightbulbOff size={15} />}
+          </button>
         )}
       </div>
 
-      {/* Button Grid: Axes / Jog & Home All */}
-      <div className="grid grid-cols-2 gap-3">
-        {/* Jog / Movement */}
-        <button
-          onClick={() => setJogModalOpen(true)}
-          disabled={isPrinting || !canJog}
-          title={!canJog ? 'Jogging not supported over network on this model' : undefined}
-          className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg bg-[#262626] hover:bg-[#383838] border border-[#2E2E2E] hover:border-[#383838] text-xs font-semibold text-[#F3F4F6] transition-all disabled:opacity-40"
-        >
-          <Move size={15} className={canJog ? 'text-[#00AE42]' : 'text-[#64748B]'} />
-          <span>{!canJog ? 'Jog (No LAN)' : isPrinting ? 'Jog (Busy)' : 'Axes / Jog'}</span>
-        </button>
+      {/* Button Grid: Axes / Jog & Home All (only when supported) */}
+      {(canJog || canHome) && (
+        <div className="grid grid-cols-2 gap-2">
+          {/* Jog / Movement */}
+          <button
+            onClick={() => setJogModalOpen(true)}
+            disabled={isPrinting || !canJog}
+            title={!canJog ? 'Jogging not supported over network on this model' : undefined}
+            className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-[#262626] hover:bg-[#383838] border border-[#2E2E2E] hover:border-[#383838] text-xs font-semibold text-[#F3F4F6] transition-all disabled:opacity-40"
+          >
+            <Move size={14} className={canJog ? 'text-[#00AE42]' : 'text-[#64748B]'} />
+            <span>{!canJog ? 'Jog (No LAN)' : isPrinting ? 'Jog (Busy)' : 'Axes / Jog'}</span>
+          </button>
 
-        {/* Home All Axes */}
-        <button
-          onClick={handleHome}
-          disabled={isPrinting || isHoming || !canHome}
-          title={!canHome ? 'Homing not supported over network on this model' : undefined}
-          className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg bg-[#262626] hover:bg-[#383838] border border-[#2E2E2E] hover:border-[#383838] text-xs font-semibold text-[#F3F4F6] transition-all disabled:opacity-40"
-        >
-          <Home size={15} className={isHoming ? 'animate-spin text-[#00AE42]' : (canHome ? 'text-[#00AE42]' : 'text-[#64748B]')} />
-          <span>{!canHome ? 'Home (No LAN)' : isHoming ? 'Homing...' : 'Home All'}</span>
-        </button>
-      </div>
+          {/* Home All Axes */}
+          <button
+            onClick={handleHome}
+            disabled={isPrinting || isHoming || !canHome}
+            title={!canHome ? 'Homing not supported over network on this model' : undefined}
+            className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-[#262626] hover:bg-[#383838] border border-[#2E2E2E] hover:border-[#383838] text-xs font-semibold text-[#F3F4F6] transition-all disabled:opacity-40"
+          >
+            <Home size={14} className={isHoming ? 'animate-spin text-[#00AE42]' : (canHome ? 'text-[#00AE42]' : 'text-[#64748B]')} />
+            <span>{!canHome ? 'Home (No LAN)' : isHoming ? 'Homing...' : 'Home All'}</span>
+          </button>
+        </div>
+      )}
 
       {/* Part Cooling Fan Speed */}
       {hasPartCoolingFan && (
-        <div className="flex flex-col gap-2.5 p-3 rounded-lg bg-[#262626]/60 border border-[#2E2E2E]">
+        <div className="flex flex-col gap-2 p-2.5 rounded-lg bg-[#262626]/60 border border-[#2E2E2E]">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-[#F3F4F6] flex items-center gap-1.5">
-              <Fan size={15} className={fanSpeed > 0 ? 'text-[#00AE42] animate-spin' : 'text-[#94A3B8]'} style={{ animationDuration: fanSpeed > 50 ? '1s' : '2.5s' }} />
+              <Fan size={14} className={fanSpeed > 0 ? 'text-[#00AE42] animate-spin' : 'text-[#94A3B8]'} style={{ animationDuration: fanSpeed > 50 ? '1s' : '2.5s' }} />
               Part Cooling Fan
             </span>
             <span className={`text-[11px] font-mono font-bold ${fanSpeed > 0 ? 'text-[#00AE42]' : 'text-[#94A3B8]'}`}>
@@ -191,52 +198,54 @@ export const ControlPanelCard: React.FC = () => {
       )}
 
       {/* Print Speed Rate Control */}
-      <div className="flex flex-col gap-2.5 p-3 rounded-lg bg-[#262626]/60 border border-[#2E2E2E]">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-[#F3F4F6] flex items-center gap-1.5">
-            <Gauge size={15} className="text-[#F59E0B]" />
-            Print Speed Rate
-          </span>
-          <span className="text-[11px] font-mono font-bold text-[#F59E0B]">
-            {currentSpeed}%
-            <span className="text-[10px] text-[#94A3B8] font-normal ml-1">
-              {currentSpeed <= 70 ? '(Quiet)' : currentSpeed <= 120 ? '(Standard)' : '(Sport)'}
+      {(capabilities?.canAdjustSpeed ?? true) && (
+        <div className="flex flex-col gap-2 p-2.5 rounded-lg bg-[#262626]/60 border border-[#2E2E2E]">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-[#F3F4F6] flex items-center gap-1.5">
+              <Gauge size={14} className="text-[#F59E0B]" />
+              Print Speed Rate
             </span>
-          </span>
-        </div>
+            <span className="text-[11px] font-mono font-bold text-[#F59E0B]">
+              {currentSpeed}%
+              <span className="text-[10px] text-[#94A3B8] font-normal ml-1">
+                ({currentSpeed <= 70 ? 'Quiet' : currentSpeed <= 120 ? 'Standard' : 'Sport'})
+              </span>
+            </span>
+          </div>
 
-        {/* Speed Preset Chips: 50% Quiet, 100% Standard, 140% Sport */}
-        <div className="grid grid-cols-3 gap-2">
-          {[
-            { percent: 50, label: 'Quiet', desc: '50% Speed' },
-            { percent: 100, label: 'Standard', desc: '100% Speed' },
-            { percent: 140, label: 'Sport', desc: '140% Speed' },
-          ].map(({ percent, label, desc }) => {
-            const isSelected = Math.abs(currentSpeed - percent) < 10;
-            return (
-              <button
-                key={percent}
-                onClick={() => handleSpeedChange(percent)}
-                className={`flex flex-col items-center py-2 px-2 rounded-lg border transition-all ${
-                  isSelected
-                    ? 'bg-[#F59E0B]/20 border-[#F59E0B] text-[#F59E0B] shadow-sm'
-                    : 'bg-[#1E1E1E] border-[#2E2E2E] text-[#D1D5DB] hover:text-[#F3F4F6] hover:border-[#383838]'
-                }`}
-              >
-                <span className="text-xs font-semibold">{label}</span>
-                <span className="text-[10px] text-[#94A3B8] mt-0.5">{desc}</span>
-              </button>
-            );
-          })}
+          {/* Speed Preset Chips: 50% Quiet, 100% Standard, 140% Sport (Single-line) */}
+          <div className="grid grid-cols-3 gap-1.5">
+            {[
+              { percent: 50, label: 'Quiet', desc: '50%' },
+              { percent: 100, label: 'Standard', desc: '100%' },
+              { percent: 140, label: 'Sport', desc: '140%' },
+            ].map(({ percent, label, desc }) => {
+              const isSelected = Math.abs(currentSpeed - percent) < 10;
+              return (
+                <button
+                  key={percent}
+                  onClick={() => handleSpeedChange(percent)}
+                  className={`flex items-center justify-center gap-1 py-1.5 px-2 rounded-md border text-xs font-semibold transition-all ${
+                    isSelected
+                      ? 'bg-[#F59E0B]/20 border-[#F59E0B] text-[#F59E0B] shadow-sm'
+                      : 'bg-[#1E1E1E] border-[#2E2E2E] text-[#D1D5DB] hover:text-[#F3F4F6] hover:border-[#383838]'
+                  }`}
+                >
+                  <span>{label}</span>
+                  <span className="text-[10px] opacity-75">{desc}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Air Filtration Fan */}
       {hasFiltration && (
-        <div className="flex flex-col gap-2 p-3 rounded-lg bg-[#262626]/60 border border-[#2E2E2E]">
+        <div className="flex flex-col gap-2 p-2.5 rounded-lg bg-[#262626]/60 border border-[#2E2E2E]">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-[#F3F4F6] flex items-center gap-1.5">
-              <Wind size={15} className="text-[#3B82F6]" />
+              <Wind size={14} className="text-[#3B82F6]" />
               Air Filtration Fan
             </span>
             <span className="text-[11px] text-[#94A3B8] capitalize font-medium">
@@ -244,12 +253,12 @@ export const ControlPanelCard: React.FC = () => {
             </span>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 mt-1">
+          <div className="grid grid-cols-3 gap-1.5 mt-0.5">
             {([
-              { mode: 'off', label: 'Off', desc: 'Inactive' },
-              { mode: 'internal', label: 'Internal', desc: 'VOC Scrub' },
-              { mode: 'external', label: 'External', desc: 'Exhaust' },
-            ] as const).map(({ mode, label, desc }) => {
+              { mode: 'off', label: 'Off' },
+              { mode: 'internal', label: 'Internal' },
+              { mode: 'external', label: 'External' },
+            ] as const).map(({ mode, label }) => {
               const isSelected = activeFiltration === mode;
               return (
                 <button
@@ -258,49 +267,17 @@ export const ControlPanelCard: React.FC = () => {
                     setSelectedFiltration(mode);
                     void setFiltration(mode);
                   }}
-                  className={`flex flex-col items-center py-1.5 px-1.5 rounded-lg border transition-all ${
+                  className={`flex items-center justify-center py-1.5 px-2 rounded-md border text-xs font-semibold transition-all ${
                     isSelected
                       ? 'bg-[#00AE42]/20 border-[#00AE42] text-[#00AE42] shadow-sm'
                       : 'bg-[#1E1E1E] border-[#2E2E2E] text-[#D1D5DB] hover:border-[#383838]'
                   }`}
                 >
-                  <span className="text-xs font-semibold capitalize">{label}</span>
-                  <span className="text-[9px] text-[#94A3B8] mt-0.5">{desc}</span>
+                  <span className="capitalize">{label}</span>
                 </button>
               );
             })}
           </div>
-        </div>
-      )}
-
-      {/* LED Light Switch */}
-      {hasLedControl && (
-        <div className="flex items-center justify-between p-3 rounded-lg bg-[#262626]/60 border border-[#2E2E2E]">
-          <div className="flex items-center gap-2.5">
-            <Lightbulb
-              size={18}
-              className={ledState ? 'text-[#F59E0B]' : 'text-[#94A3B8]'}
-            />
-            <div className="flex flex-col">
-              <span className="text-xs font-semibold text-[#F3F4F6]">Chamber Lighting</span>
-              <span className="text-[11px] text-[#94A3B8]">
-                {ledState ? 'LEDs Active' : 'LEDs Disabled'}
-              </span>
-            </div>
-          </div>
-
-          <button
-            onClick={handleToggleLed}
-            className={`w-11 h-6 rounded-full transition-colors relative focus:outline-none p-0.5 ${
-              ledState ? 'bg-[#00AE42]' : 'bg-[#383838]'
-            }`}
-          >
-            <div
-              className={`w-5 h-5 rounded-full bg-white transition-transform ${
-                ledState ? 'translate-x-5' : 'translate-x-0'
-              }`}
-            />
-          </button>
         </div>
       )}
 

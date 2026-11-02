@@ -6,10 +6,11 @@ import {
   Pause,
   RefreshCw,
   Infinity as InfinityIcon,
-  ShieldCheck,
   ShieldAlert,
   AlertCircle,
   Camera,
+  Lightbulb,
+  LightbulbOff,
 } from 'lucide-react';
 import { usePrinter } from '../../context/PrinterContext';
 import { api } from '../../services/api';
@@ -21,8 +22,16 @@ interface CameraCardProps {
 }
 
 export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdog }) => {
-  const { activeContextId, status } = usePrinter();
+  const { activeContextId, activeContext, status, features, capabilities, setLed } = usePrinter();
   const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  const modelStr = (activeContext?.model || '').toLowerCase();
+  const nameStr = (activeContext?.name || '').toLowerCase();
+  const isCreator5 =
+    modelStr.includes('creator') ||
+    nameStr.includes('creator') ||
+    (modelStr.includes('ad5x') && nameStr.includes('c5'));
+  const hasLedControl = isCreator5 ? true : (capabilities?.hasLedControl ?? (features?.hasLED ?? true));
 
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [countdown, setCountdown] = useState<number>(30);
@@ -264,45 +273,99 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
   return (
     <div className="bg-[#1E1E1E] border border-[#2E2E2E] rounded-xl overflow-hidden shadow-sm flex flex-col">
       {/* Header Bar */}
-      <div className="px-4 py-3 flex items-center justify-between border-b border-[#2E2E2E]">
+      <div className="px-3.5 py-2.5 flex items-center justify-between border-b border-[#2E2E2E]">
         <div className="flex items-center gap-2">
           <Video size={16} className="text-[#00AE42]" />
           <span className="text-sm font-semibold text-[#F3F4F6]">Camera Feed</span>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Watchdog Status Chip in Header */}
+        <div className="flex items-center gap-1 sm:gap-1.5">
+          {/* Watchdog Alert Pill (only displayed when defect alert active to avoid duplicating sticky header) */}
+          {isAlert && (
+            <button
+              onClick={onOpenWatchdog}
+              className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-[#EF4444]/20 border border-[#EF4444] text-[#EF4444] animate-pulse"
+            >
+              <ShieldAlert size={12} />
+              <span>AI Alert: {Math.round((watchdog?.confidence || 0) * 100)}%</span>
+            </button>
+          )}
+
+          {/* Pause / Resume Button */}
           <button
-            onClick={onOpenWatchdog}
-            className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold border transition-all ${
-              isAlert
-                ? 'bg-[#EF4444]/20 border-[#EF4444] text-[#EF4444] animate-pulse'
-                : watchdog?.online
-                ? 'bg-[#00AE42]/15 border-[#00AE42]/40 text-[#00AE42]'
-                : 'bg-[#262626] border-[#2E2E2E] text-[#94A3B8]'
-            }`}
+            onClick={() => {
+              if (isPlaying) {
+                setIsPlaying(false);
+              } else {
+                setIsPlaying(true);
+                setCountdown(30);
+              }
+            }}
+            className="p-1.5 rounded-lg text-[#94A3B8] hover:text-[#F3F4F6] hover:bg-[#262626] transition-colors"
+            title={isPlaying ? 'Pause Stream' : 'Play Stream (30s)'}
           >
-            {isAlert ? <ShieldAlert size={12} /> : <ShieldCheck size={12} />}
-            <span>{watchdog?.online ? `AI Guard: ${Math.round((watchdog.confidence || 0) * 100)}%` : 'AI Guard: Idle'}</span>
+            {isPlaying ? <Pause size={15} /> : <Play size={15} />}
           </button>
+
+          {/* Reconnect / Refresh Button */}
+          <button
+            onClick={() => {
+              setIsPlaying(true);
+              startStream();
+            }}
+            className="p-1.5 rounded-lg text-[#94A3B8] hover:text-[#F3F4F6] hover:bg-[#262626] transition-colors"
+            title="Reconnect Stream"
+          >
+            <RefreshCw size={14} />
+          </button>
+
+          {/* Continuous Stream Toggle */}
+          <button
+            onClick={handleToggleContinuous}
+            className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium border transition-colors ${
+              continuous
+                ? 'bg-[#00AE42]/15 border-[#00AE42]/40 text-[#00AE42]'
+                : 'bg-[#262626] border-[#2E2E2E] text-[#94A3B8] hover:text-[#F3F4F6]'
+            }`}
+            title="Toggle continuous streaming without 30s timeout"
+          >
+            <InfinityIcon size={13} />
+            <span className="hidden sm:inline text-[11px]">Auto</span>
+          </button>
+
+          {/* Chamber Lighting Quick Toggle */}
+          {hasLedControl && (
+            <button
+              onClick={() => void setLed(!status?.ledState)}
+              aria-label={status?.ledState ? 'Turn Chamber Light Off' : 'Turn Chamber Light On'}
+              title={status?.ledState ? 'Chamber Light: ON (Click to turn off)' : 'Chamber Light: OFF (Click to turn on)'}
+              className={`p-1.5 rounded-lg border transition-all ${
+                status?.ledState
+                  ? 'bg-[#F59E0B]/20 border-[#F59E0B]/50 text-[#F59E0B] shadow-[0_0_8px_rgba(245,158,11,0.25)]'
+                  : 'bg-[#262626] border-[#2E2E2E] text-[#64748B] hover:text-[#94A3B8]'
+              }`}
+            >
+              {status?.ledState ? <Lightbulb size={15} /> : <LightbulbOff size={15} />}
+            </button>
+          )}
 
           {/* Capture Snapshot Button */}
           <button
             onClick={handleCaptureSnapshot}
             disabled={isCapturing}
-            className="p-1 rounded-lg text-[#94A3B8] hover:text-[#F3F4F6] hover:bg-[#262626] transition-colors"
+            className="p-1.5 rounded-lg text-[#94A3B8] hover:text-[#F3F4F6] hover:bg-[#262626] transition-colors"
             title="Download Snapshot Image"
           >
-            <Camera size={16} className={isCapturing ? 'animate-pulse text-[#00AE42]' : ''} />
+            <Camera size={15} className={isCapturing ? 'animate-pulse text-[#00AE42]' : ''} />
           </button>
 
           {/* Fullscreen HUD Button */}
           <button
             onClick={onOpenHud}
-            className="p-1 rounded-lg text-[#94A3B8] hover:text-[#F3F4F6] hover:bg-[#262626] transition-colors"
+            className="p-1.5 rounded-lg text-[#94A3B8] hover:text-[#F3F4F6] hover:bg-[#262626] transition-colors"
             title="Fullscreen Camera HUD"
           >
-            <Maximize2 size={16} />
+            <Maximize2 size={15} />
           </button>
         </div>
       </div>
@@ -431,62 +494,6 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
             {streamMode === 'webrtc' ? 'Live HD' : 'Live Stream'}
           </div>
         )}
-      </div>
-
-      {/* Camera Controls Footer */}
-      <div className="px-4 py-2.5 bg-[#262626]/50 flex items-center justify-between border-t border-[#2E2E2E]">
-        <div className="flex items-center gap-2">
-          {/* Pause / Resume Button */}
-          <button
-            onClick={() => {
-              if (isPlaying) {
-                setIsPlaying(false);
-              } else {
-                setIsPlaying(true);
-                setCountdown(30);
-              }
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#262626] border border-[#2E2E2E] hover:border-[#383838] text-xs font-medium text-[#F3F4F6] transition-colors"
-          >
-            {isPlaying ? (
-              <>
-                <Pause size={13} />
-                <span>Pause</span>
-              </>
-            ) : (
-              <>
-                <Play size={13} />
-                <span>Play</span>
-              </>
-            )}
-          </button>
-
-          {/* Reconnect / Refresh Button */}
-          <button
-            onClick={() => {
-              setIsPlaying(true);
-              startStream();
-            }}
-            className="p-1.5 rounded-lg bg-[#262626] border border-[#2E2E2E] hover:border-[#383838] text-[#94A3B8] hover:text-[#F3F4F6] transition-colors"
-            title="Reconnect Stream"
-          >
-            <RefreshCw size={13} />
-          </button>
-        </div>
-
-        {/* Continuous Stream Toggle */}
-        <button
-          onClick={handleToggleContinuous}
-          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-            continuous
-              ? 'bg-[#00AE42]/15 border-[#00AE42]/40 text-[#00AE42]'
-              : 'bg-[#262626] border-[#2E2E2E] text-[#94A3B8] hover:text-[#F3F4F6]'
-          }`}
-          title="Toggle continuous streaming without 30s timeout"
-        >
-          <InfinityIcon size={13} />
-          <span>Continuous</span>
-        </button>
       </div>
     </div>
   );

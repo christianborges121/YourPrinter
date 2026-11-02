@@ -48,132 +48,154 @@ class TemperatureCard extends ConsumerWidget {
     final double maxChamberTemp =
         capabilities?.maxChamberTemp ?? (isCreator5 ? 80.0 : 60.0);
 
+    final toolColors = [AppColors.toolheadT0, AppColors.toolheadT1, AppColors.warning, AppColors.info];
+    String getToolLabel(int i, int total) {
+      if (total <= 1) return 'Extruder';
+      if (total == 2) return i == 0 ? 'T0 Left' : 'T1 Right';
+      return 'Tool T$i';
+    }
+
+    final tiles = <Widget>[
+      // Heated Bed Tile
+      _buildTempRow(
+        context: context,
+        icon: LucideIcons.layers,
+        iconColor: AppColors.bedHeat,
+        label: 'Bed',
+        currentTemp: status.bedTemperature,
+        targetTemp: status.bedTargetTemperature,
+        onTap: () async {
+          final target = await showTempSetpointDialog(
+            context: context,
+            title: 'Set Bed Temperature',
+            currentVal: status.bedTargetTemperature,
+            maxTemp: 120,
+          );
+          if (target != null) {
+            if (target == 0) {
+              await printerService.setBedOff(contextId: activeContext?.contextId);
+            } else {
+              await printerService.setBedTemp(target, contextId: activeContext?.contextId);
+            }
+          }
+        },
+      ),
+
+      // Chamber Tile (if supported)
+      if (hasChamberHeater)
+        _buildTempRow(
+          key: const Key('temp_row_chamber'),
+          context: context,
+          icon: LucideIcons.box,
+          iconColor: AppColors.chamber,
+          label: 'Chamber',
+          currentTemp: status.chamberTemperature ?? 0.0,
+          targetTemp: status.chamberTargetTemperature ?? 0.0,
+          onTap: () async {
+            final target = await showTempSetpointDialog(
+              context: context,
+              title: 'Set Chamber Temperature',
+              currentVal: status.chamberTargetTemperature ?? 0.0,
+              maxTemp: maxChamberTemp,
+            );
+            if (target != null) {
+              if (target == 0) {
+                await printerService.setChamberOff(contextId: activeContext?.contextId);
+              } else {
+                await printerService.setChamberTemp(target, contextId: activeContext?.contextId);
+              }
+            }
+          },
+        ),
+
+      // Extruder Tiles
+      if (hasMultipleTools) ...[
+        for (int i = 0; i < status.toolTemps.length; i++)
+          _buildTempRow(
+            context: context,
+            icon: LucideIcons.flame,
+            iconColor: toolColors[i % toolColors.length],
+            label: getToolLabel(i, status.toolTemps.length),
+            currentTemp: status.toolTemps[i],
+            targetTemp: i < status.toolTargetTemps.length ? status.toolTargetTemps[i] : 0.0,
+            onTap: () async {
+              final target = await showTempSetpointDialog(
+                context: context,
+                title: 'Set Tool $i Temperature',
+                currentVal: i < status.toolTargetTemps.length ? status.toolTargetTemps[i] : 0.0,
+                maxTemp: 320,
+              );
+              if (target != null) {
+                if (target == 0) {
+                  await printerService.setExtruderOff(toolIndex: i, contextId: activeContext?.contextId);
+                } else {
+                  await printerService.setExtruderTemp(target, toolIndex: i, contextId: activeContext?.contextId);
+                }
+              }
+            },
+          ),
+      ] else ...[
+        _buildTempRow(
+          context: context,
+          icon: LucideIcons.flame,
+          iconColor: AppColors.toolheadT0,
+          label: 'Extruder',
+          currentTemp: status.nozzleTemperature,
+          targetTemp: status.nozzleTargetTemperature,
+          onTap: () async {
+            final target = await showTempSetpointDialog(
+              context: context,
+              title: 'Set Extruder Temperature',
+              currentVal: status.nozzleTargetTemperature,
+              maxTemp: 320,
+            );
+            if (target != null) {
+              if (target == 0) {
+                await printerService.setExtruderOff(toolIndex: 0, contextId: activeContext?.contextId);
+              } else {
+                await printerService.setExtruderTemp(target, toolIndex: 0, contextId: activeContext?.contextId);
+              }
+            }
+          },
+        ),
+      ],
+    ];
+
+    final gridRows = <Widget>[];
+    for (int i = 0; i < tiles.length; i += 2) {
+      if (i > 0) gridRows.add(const SizedBox(height: 8));
+      gridRows.add(
+        Row(
+          children: [
+            Expanded(child: tiles[i]),
+            const SizedBox(width: 8),
+            if (i + 1 < tiles.length)
+              Expanded(child: tiles[i + 1])
+            else
+              const Expanded(child: SizedBox.shrink()),
+          ],
+        ),
+      );
+    }
+
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Row(
               children: [
-                Icon(LucideIcons.thermometer, size: 16, color: AppColors.bedHeat),
+                Icon(LucideIcons.thermometer, size: 15, color: AppColors.bedHeat),
                 SizedBox(width: 8),
                 Text(
                   'Temperatures',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-
-            // Heated Bed Row
-            _buildTempRow(
-              context: context,
-              icon: LucideIcons.layers,
-              iconColor: AppColors.bedHeat,
-              label: 'Heated Bed',
-              currentTemp: status.bedTemperature,
-              targetTemp: status.bedTargetTemperature,
-              onTap: () async {
-                final target = await showTempSetpointDialog(
-                  context: context,
-                  title: 'Set Bed Temperature',
-                  currentVal: status.bedTargetTemperature,
-                  maxTemp: 120,
-                );
-                if (target != null) {
-                  if (target == 0) {
-                    await printerService.setBedOff(contextId: activeContext?.contextId);
-                  } else {
-                    await printerService.setBedTemp(target, contextId: activeContext?.contextId);
-                  }
-                }
-              },
-            ),
-            const Divider(height: 16),
-
-            // Extruder Rows (Dynamic Tool 0 / Tool 1 for Creator 5 Pro, single for A1 Mini)
-            if (hasMultipleTools) ...[
-              for (int i = 0; i < status.toolTemps.length; i++) ...[
-                if (i > 0) const Divider(height: 16),
-                _buildTempRow(
-                  context: context,
-                  icon: LucideIcons.flame,
-                  iconColor: i == 0 ? AppColors.toolheadT0 : AppColors.toolheadT1,
-                  label: i == 0 ? 'Extruder (T0 Left)' : 'Extruder (T1 Right)',
-                  currentTemp: status.toolTemps[i],
-                  targetTemp: i < status.toolTargetTemps.length ? status.toolTargetTemps[i] : 0.0,
-                  onTap: () async {
-                    final target = await showTempSetpointDialog(
-                      context: context,
-                      title: 'Set Tool $i Temperature',
-                      currentVal: i < status.toolTargetTemps.length ? status.toolTargetTemps[i] : 0.0,
-                      maxTemp: 320,
-                    );
-                    if (target != null) {
-                      if (target == 0) {
-                        await printerService.setExtruderOff(toolIndex: i, contextId: activeContext?.contextId);
-                      } else {
-                        await printerService.setExtruderTemp(target, toolIndex: i, contextId: activeContext?.contextId);
-                      }
-                    }
-                  },
-                ),
-              ],
-            ] else ...[
-              _buildTempRow(
-                context: context,
-                icon: LucideIcons.flame,
-                iconColor: AppColors.toolheadT0,
-                label: 'Extruder',
-                currentTemp: status.nozzleTemperature,
-                targetTemp: status.nozzleTargetTemperature,
-                onTap: () async {
-                  final target = await showTempSetpointDialog(
-                    context: context,
-                    title: 'Set Extruder Temperature',
-                    currentVal: status.nozzleTargetTemperature,
-                    maxTemp: 320,
-                  );
-                  if (target != null) {
-                    if (target == 0) {
-                      await printerService.setExtruderOff(toolIndex: 0, contextId: activeContext?.contextId);
-                    } else {
-                      await printerService.setExtruderTemp(target, toolIndex: 0, contextId: activeContext?.contextId);
-                    }
-                  }
-                },
-              ),
-            ],
-
-            // Chamber Row (if supported)
-            if (hasChamberHeater) ...[
-              const Divider(height: 16),
-              _buildTempRow(
-                key: const Key('temp_row_chamber'),
-                context: context,
-                icon: LucideIcons.box,
-                iconColor: AppColors.chamber,
-                label: 'Chamber',
-                currentTemp: status.chamberTemperature ?? 0.0,
-                targetTemp: status.chamberTargetTemperature ?? 0.0,
-                onTap: () async {
-                  final target = await showTempSetpointDialog(
-                    context: context,
-                    title: 'Set Chamber Temperature',
-                    currentVal: status.chamberTargetTemperature ?? 0.0,
-                    maxTemp: maxChamberTemp,
-                  );
-                  if (target != null) {
-                    if (target == 0) {
-                      await printerService.setChamberOff(contextId: activeContext?.contextId);
-                    } else {
-                      await printerService.setChamberTemp(target, contextId: activeContext?.contextId);
-                    }
-                  }
-                },
-              ),
-            ],
+            const SizedBox(height: 10),
+            Column(children: gridRows),
           ],
         ),
       ),
@@ -196,33 +218,47 @@ class TemperatureCard extends ConsumerWidget {
       key: key,
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceSecondary.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.border),
+        ),
         child: Row(
           children: [
-            Icon(icon, size: 16, color: iconColor),
-            const SizedBox(width: 8),
-            Text(label, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
-            const Spacer(),
+            Container(
+              padding: const EdgeInsets.all(5),
+              decoration: BoxDecoration(
+                color: isHeating ? iconColor.withValues(alpha: 0.2) : AppColors.surface,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Icon(icon, size: 14, color: isHeating ? iconColor : AppColors.textMuted),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 4),
             if (isHeating)
               Container(
-                margin: const EdgeInsets.only(right: 6),
+                margin: const EdgeInsets.only(right: 4),
                 width: 6,
                 height: 6,
-                decoration: const BoxDecoration(color: AppColors.bedHeat, shape: BoxShape.circle),
+                decoration: BoxDecoration(color: iconColor, shape: BoxShape.circle),
               ),
             Text(
               '${currentTemp.toStringAsFixed(0)}\u00B0C',
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
             ),
             Text(
               ' / ${targetTemp.toStringAsFixed(0)}\u00B0C',
-              style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+              style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
             ),
-            if (onTap != null) ...[
-              const SizedBox(width: 4),
-              const Icon(LucideIcons.chevronRight, size: 14, color: AppColors.textMuted),
-            ],
           ],
         ),
       ),

@@ -13,11 +13,11 @@ interface DashboardScreenProps {
 
 export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onOpenHud, onOpenWatchdog }) => {
   return (
-    <div className="flex flex-col gap-5 max-w-7xl mx-auto pb-12">
+    <div className="flex flex-col gap-5 max-w-7xl mx-auto pb-20 md:pb-12">
       {/* Auto-Pause Defect Alert Banner (if defect triggered) */}
       <WatchdogAlertBanner onInspect={onOpenWatchdog} />
 
-      {/* Grid Layout: Responsive 2-column or 3-column layout */}
+      {/* Grid Layout: Responsive 2-column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         {/* Left Column (Main Feed & Job Progress): 7 cols on desktop */}
         <div className="lg:col-span-7 flex flex-col gap-5">
@@ -27,8 +27,10 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onOpenHud, onO
           {/* Card 2: Job Progress Card */}
           <JobProgressCard />
 
-          {/* Card 5: Multi-Material AMS Spool Card */}
-          <AmsSpoolCard />
+          {/* Card 5: Multi-Material AMS Spool Card (Desktop Placement) */}
+          <div className="hidden lg:block">
+            <AmsSpoolCard />
+          </div>
         </div>
 
         {/* Right Column (Controls & Temperatures): 5 cols on desktop */}
@@ -38,6 +40,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ onOpenHud, onO
 
           {/* Card 4: Hardware Controls Card */}
           <ControlPanelCard />
+
+          {/* Card 5: Multi-Material AMS Spool Card (Mobile Placement after Controls) */}
+          <div className="block lg:hidden">
+            <AmsSpoolCard />
+          </div>
         </div>
       </div>
     </div>

@@ -199,62 +199,6 @@ class JobProgressCard extends ConsumerWidget {
               ),
             ),
 
-            // Speed Rate Quick Bar (Active Print)
-            if (status.hasActiveJob) ...[
-              const SizedBox(height: 10),
-              Container(
-                key: const Key('job_speed_quick_bar'),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceSecondary,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(LucideIcons.gauge, size: 14, color: AppColors.warning),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Speed: ${status.printSpeed.round()}%',
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.warning),
-                    ),
-                    const Spacer(),
-                    for (final preset in [
-                      (50, '50% Quiet'),
-                      (100, '100% Std'),
-                      (140, '140% Sport'),
-                    ]) ...[
-                      Padding(
-                        padding: const EdgeInsets.only(left: 4),
-                        child: OutlinedButton(
-                          key: Key('job_speed_preset_${preset.$1}'),
-                          style: OutlinedButton.styleFrom(
-                            backgroundColor: (status.printSpeed - preset.$1).abs() < 15
-                                ? AppColors.warning.withValues(alpha: 0.2)
-                                : AppColors.surface,
-                            foregroundColor: (status.printSpeed - preset.$1).abs() < 15
-                                ? AppColors.warning
-                                : AppColors.textSecondary,
-                            side: BorderSide(
-                              color: (status.printSpeed - preset.$1).abs() < 15
-                                  ? AppColors.warning
-                                  : AppColors.border,
-                            ),
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            minimumSize: Size.zero,
-                          ),
-                          onPressed: () async {
-                            await printerService.setPrintSpeed(preset.$1, contextId: activeContext?.contextId);
-                          },
-                          child: Text(preset.$2, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-
             // Completed Banner with Clear Action
             if (isCompleted) ...[
               const SizedBox(height: 14),

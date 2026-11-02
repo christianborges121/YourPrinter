@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/printer_status.dart';
 import '../../services/camera_stream_service.dart';
+import '../../state/auth_provider.dart';
 import '../../state/camera_provider.dart';
 import '../../state/printer_context_provider.dart';
 import '../../state/telemetry_provider.dart';
@@ -20,6 +21,9 @@ class CameraPanel extends ConsumerWidget {
     final activeContext = ref.watch(printerContextProvider).activeContext;
     final telemetry = ref.watch(telemetryProvider);
     final watchdog = telemetry.status?.watchdog;
+    final printerService = ref.read(printerServiceProvider);
+    final ledOn = telemetry.status?.ledState ?? true;
+    final hasLedControl = telemetry.features?.hasLED ?? true;
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -41,6 +45,20 @@ class CameraPanel extends ConsumerWidget {
                 // AI Watchdog Guard status chip
                 _buildWatchdogChip(context, watchdog),
                 const SizedBox(width: 8),
+                // Chamber Lighting Toggle
+                if (hasLedControl) ...[
+                  IconButton(
+                    icon: Icon(ledOn ? LucideIcons.lightbulb : LucideIcons.lightbulbOff, size: 16),
+                    color: ledOn ? AppColors.warning : AppColors.textMuted,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    tooltip: ledOn ? 'Turn Chamber Light Off' : 'Turn Chamber Light On',
+                    onPressed: () async {
+                      await printerService.setLED(!ledOn, contextId: activeContext?.contextId);
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                ],
                 // Fullscreen HUD Button
                 IconButton(
                   icon: const Icon(LucideIcons.maximize2, size: 16, color: AppColors.textSecondary),

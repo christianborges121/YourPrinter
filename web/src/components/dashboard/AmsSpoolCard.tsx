@@ -232,9 +232,16 @@ export const AmsSpoolCard: React.FC = () => {
             >
               {/* Slot Header Badge */}
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#94A3B8] bg-[#1E1E1E] px-1.5 py-0.5 rounded border border-[#2E2E2E]">
-                  {isMultiHead ? `Tool T${index}` : `Slot ${slotNum}`}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#94A3B8] bg-[#1E1E1E] px-1.5 py-0.5 rounded border border-[#2E2E2E]">
+                    {isMultiHead ? `Tool T${index}` : `Slot ${slotNum}`}
+                  </span>
+                  {isMultiHead && status?.toolTemps && index < status.toolTemps.length && (
+                    <span className="text-[10px] font-mono text-[#D1D5DB] bg-[#1E1E1E] px-1.5 py-0.5 rounded border border-[#2E2E2E]">
+                      {Math.round(status.toolTemps[index])}°C
+                    </span>
+                  )}
+                </div>
                 {isActive && (
                   <span className="flex items-center gap-1 text-[10px] font-bold text-[#00AE42]">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#00AE42] animate-pulse" />

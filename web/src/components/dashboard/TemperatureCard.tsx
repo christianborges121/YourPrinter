@@ -62,11 +62,19 @@ export const TemperatureCard: React.FC = () => {
     });
   };
 
+  const TOOL_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EC4899'];
+
+  const getToolLabel = (idx: number, total: number) => {
+    if (total <= 1) return 'Nozzle';
+    if (total === 2) return idx === 0 ? 'T0 Left' : 'T1 Right';
+    return `Tool T${idx}`;
+  };
+
   const openExtruderModal = (index: number) => {
     const curTarget = index < toolTargets.length ? toolTargets[index] : status.nozzleTargetTemperature;
     setModalConfig({
       isOpen: true,
-      title: hasMultipleTools ? `Set Extruder (T${index}) Temperature` : 'Set Nozzle Temperature',
+      title: hasMultipleTools ? `Set ${getToolLabel(index, toolTemps.length)} Temperature` : 'Set Nozzle Temperature',
       currentVal: curTarget,
       maxTemp: capabilities?.maxExtruderTemp || 320,
       isExtruder: true,
@@ -97,145 +105,120 @@ export const TemperatureCard: React.FC = () => {
   };
 
   return (
-    <div className="bg-[#1E1E1E] border border-[#2E2E2E] rounded-xl p-5 shadow-sm flex flex-col gap-3">
-      {/* Card Header */}
-      <div className="flex items-center justify-between pb-2 border-b border-[#2E2E2E]">
-        <div className="flex items-center gap-2">
-          <Thermometer size={16} className="text-[#F97316]" />
-          <span className="text-sm font-semibold text-[#F3F4F6]">Temperatures</span>
+    <div className="bg-[#1E1E1E] border border-[#2E2E2E] rounded-xl p-3.5 shadow-sm flex flex-col gap-2.5">
+      {/* Compact Card Header */}
+      <div className="flex items-center justify-between pb-1.5 border-b border-[#2E2E2E]">
+        <div className="flex items-center gap-1.5">
+          <Thermometer size={15} className="text-[#F97316]" />
+          <span className="text-xs font-semibold uppercase tracking-wider text-[#94A3B8]">Temperatures</span>
         </div>
-        <span className="text-[11px] text-[#94A3B8]">Click any row to adjust</span>
+        <span className="text-[10px] text-[#64748B]">Tap to set</span>
       </div>
 
-      {/* Heated Bed Row */}
-      {(capabilities?.hasBedHeater ?? true) && (
-        <button
-          onClick={openBedModal}
-          className="w-full flex items-center justify-between p-2.5 rounded-lg bg-[#262626]/60 hover:bg-[#262626] border border-[#2E2E2E] transition-all text-left group"
-        >
-          <div className="flex items-center gap-3">
-            <div
-              className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                status.bedTargetTemperature > 0
-                  ? 'bg-[#F97316]/20 text-[#F97316]'
-                  : 'bg-[#1E1E1E] text-[#94A3B8]'
-              }`}
-            >
-              <Layers size={18} />
-            </div>
-            <div>
-              <div className="text-xs font-semibold text-[#F3F4F6] group-hover:text-[#F97316] transition-colors">
-                Heated Bed
-              </div>
-              <div className="text-[11px] text-[#94A3B8]">Target: {status.bedTargetTemperature}°C</div>
-            </div>
-          </div>
-
-          <div className="text-right">
-            <div className="text-base sm:text-lg font-bold text-[#F3F4F6] flex items-center justify-end gap-1.5">
-              {status.bedTargetTemperature > 0 && status.bedTemperature < status.bedTargetTemperature - 2 && (
-                <span className="w-2 h-2 rounded-full bg-[#F97316] animate-pulse" />
-              )}
-              <span>{Math.round(status.bedTemperature)}°C</span>
-            </div>
-            <span className="text-[10px] text-[#94A3B8]">
-              {status.bedTargetTemperature > 0 ? 'Heating / Ready' : 'Off'}
-            </span>
-          </div>
-        </button>
-      )}
-
-      {/* Extruder Rows */}
-      {toolTemps.map((temp, idx) => {
-        const target = idx < toolTargets.length ? toolTargets[idx] : 0;
-        const isT0 = idx === 0;
-        const accentColor = isT0 ? '#3B82F6' : '#10B981';
-        const label = hasMultipleTools
-          ? idx === 0
-            ? 'Extruder (T0 Left)'
-            : 'Extruder (T1 Right)'
-          : 'Extruder / Nozzle';
-
-        return (
+      {/* Compact 2-Column Tile Grid */}
+      <div className="grid grid-cols-2 gap-2">
+        {/* Heated Bed Tile */}
+        {(capabilities?.hasBedHeater ?? true) && (
           <button
-            key={idx}
-            onClick={() => openExtruderModal(idx)}
-            className="w-full flex items-center justify-between p-2.5 rounded-lg bg-[#262626]/60 hover:bg-[#262626] border border-[#2E2E2E] transition-all text-left group"
+            onClick={openBedModal}
+            className="flex items-center justify-between p-2 rounded-lg bg-[#262626]/60 hover:bg-[#262626] border border-[#2E2E2E] hover:border-[#F97316]/40 transition-all text-left group"
           >
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 min-w-0">
               <div
-                className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-                style={{
-                  backgroundColor: target > 0 ? `${accentColor}25` : '#1E1E1E',
-                  color: target > 0 ? accentColor : '#94A3B8',
-                }}
+                className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 ${
+                  status.bedTargetTemperature > 0
+                    ? 'bg-[#F97316]/20 text-[#F97316]'
+                    : 'bg-[#1E1E1E] text-[#94A3B8]'
+                }`}
               >
-                <Flame size={18} />
+                <Layers size={14} />
               </div>
-              <div>
-                <div
-                  className="text-xs font-semibold text-[#F3F4F6] transition-colors"
-                  style={{ color: target > 0 ? '#F3F4F6' : undefined }}
-                >
-                  {label}
-                </div>
-                <div className="text-[11px] text-[#94A3B8]">Target: {target}°C</div>
-              </div>
+              <span className="text-xs font-semibold text-[#F3F4F6] group-hover:text-[#F97316] transition-colors truncate">
+                Bed
+              </span>
             </div>
 
-            <div className="text-right">
-              <div className="text-base sm:text-lg font-bold text-[#F3F4F6] flex items-center justify-end gap-1.5">
-                {target > 0 && temp < target - 2 && (
-                  <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: accentColor }} />
-                )}
-                <span>{Math.round(temp)}°C</span>
-              </div>
-              <span className="text-[10px] text-[#94A3B8]">{target > 0 ? 'Heating / Hot' : 'Off'}</span>
+            <div className="flex items-baseline gap-0.5 shrink-0 ml-1">
+              {status.bedTargetTemperature > 0 && status.bedTemperature < status.bedTargetTemperature - 2 && (
+                <span className="w-1.5 h-1.5 rounded-full bg-[#F97316] animate-pulse mr-1 self-center" />
+              )}
+              <span className="text-sm font-bold text-[#F3F4F6]">{Math.round(status.bedTemperature)}°</span>
+              <span className="text-[11px] text-[#94A3B8]">/{status.bedTargetTemperature}°</span>
             </div>
           </button>
-        );
-      })}
+        )}
 
-      {/* Chamber Temperature (if supported) */}
-      {hasChamberHeater && (
-        <button
-          onClick={openChamberModal}
-          className="w-full flex items-center justify-between p-2.5 rounded-lg bg-[#262626]/60 hover:bg-[#262626] border border-[#2E2E2E] transition-all text-left group"
-        >
-          <div className="flex items-center gap-3">
-            <div
-              className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                (status.chamberTargetTemperature || 0) > 0
-                  ? 'bg-[#8B5CF6]/20 text-[#8B5CF6]'
-                  : 'bg-[#1E1E1E] text-[#94A3B8]'
-              }`}
-            >
-              <Box size={18} />
-            </div>
-            <div>
-              <div className="text-xs font-semibold text-[#F3F4F6] group-hover:text-[#8B5CF6] transition-colors">
-                Chamber Heater
+        {/* Chamber Heater Tile (if supported) */}
+        {hasChamberHeater && (
+          <button
+            onClick={openChamberModal}
+            className="flex items-center justify-between p-2 rounded-lg bg-[#262626]/60 hover:bg-[#262626] border border-[#2E2E2E] hover:border-[#8B5CF6]/40 transition-all text-left group"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <div
+                className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 ${
+                  (status.chamberTargetTemperature || 0) > 0
+                    ? 'bg-[#8B5CF6]/20 text-[#8B5CF6]'
+                    : 'bg-[#1E1E1E] text-[#94A3B8]'
+                }`}
+              >
+                <Box size={14} />
               </div>
-              <div className="text-[11px] text-[#94A3B8]">
-                Target: {status.chamberTargetTemperature || 0}°C
-              </div>
+              <span className="text-xs font-semibold text-[#F3F4F6] group-hover:text-[#8B5CF6] transition-colors truncate">
+                Chamber
+              </span>
             </div>
-          </div>
 
-          <div className="text-right">
-            <div className="text-base sm:text-lg font-bold text-[#F3F4F6] flex items-center justify-end gap-1.5">
+            <div className="flex items-baseline gap-0.5 shrink-0 ml-1">
               {(status.chamberTargetTemperature || 0) > 0 &&
                 (status.chamberTemperature || 0) < (status.chamberTargetTemperature || 0) - 2 && (
-                  <span className="w-2 h-2 rounded-full bg-[#8B5CF6] animate-pulse" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#8B5CF6] animate-pulse mr-1 self-center" />
                 )}
-              <span>{Math.round(status.chamberTemperature || 0)}°C</span>
+              <span className="text-sm font-bold text-[#F3F4F6]">{Math.round(status.chamberTemperature || 0)}°</span>
+              <span className="text-[11px] text-[#94A3B8]">/{status.chamberTargetTemperature || 0}°</span>
             </div>
-            <span className="text-[10px] text-[#94A3B8]">
-              {(status.chamberTargetTemperature || 0) > 0 ? 'Heating / Ready' : 'Off'}
-            </span>
-          </div>
-        </button>
-      )}
+          </button>
+        )}
+
+        {/* Extruder Tiles (T0..Tn) */}
+        {toolTemps.map((temp, idx) => {
+          const target = idx < toolTargets.length ? toolTargets[idx] : 0;
+          const accentColor = TOOL_COLORS[idx % TOOL_COLORS.length];
+          const label = getToolLabel(idx, toolTemps.length);
+
+          return (
+            <button
+              key={idx}
+              onClick={() => openExtruderModal(idx)}
+              className="flex items-center justify-between p-2 rounded-lg bg-[#262626]/60 hover:bg-[#262626] border border-[#2E2E2E] hover:border-[#383838] transition-all text-left group"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <div
+                  className="w-7 h-7 rounded-md flex items-center justify-center shrink-0"
+                  style={{
+                    backgroundColor: target > 0 ? `${accentColor}25` : '#1E1E1E',
+                    color: target > 0 ? accentColor : '#94A3B8',
+                  }}
+                >
+                  <Flame size={14} />
+                </div>
+                <span className="text-xs font-semibold text-[#F3F4F6] truncate">{label}</span>
+              </div>
+
+              <div className="flex items-baseline gap-0.5 shrink-0 ml-1">
+                {target > 0 && temp < target - 2 && (
+                  <span
+                    className="w-1.5 h-1.5 rounded-full animate-pulse mr-1 self-center"
+                    style={{ backgroundColor: accentColor }}
+                  />
+                )}
+                <span className="text-sm font-bold text-[#F3F4F6]">{Math.round(temp)}°</span>
+                <span className="text-[11px] text-[#94A3B8]">/{target}°</span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
 
       {/* Temp Setpoint Dialog */}
       <TempSetpointModal

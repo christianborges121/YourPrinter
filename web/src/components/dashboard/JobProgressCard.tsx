@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { Play, Pause, Square, FileText, Clock, Layers, Gauge } from 'lucide-react';
+import { Play, Pause, Square, FileText, Clock, Layers } from 'lucide-react';
 import { usePrinter } from '../../context/PrinterContext';
 import { StatusBadge } from '../common/StatusBadge';
 import { ConfirmModal } from '../modals/ConfirmModal';
 
 export const JobProgressCard: React.FC = () => {
-  const { status, activeContext, pausePrint, resumePrint, cancelPrint, setPrintSpeed } = usePrinter();
+  const { status, activeContext, pausePrint, resumePrint, cancelPrint } = usePrinter();
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
 
@@ -69,7 +69,7 @@ export const JobProgressCard: React.FC = () => {
   };
 
   return (
-    <div className="bg-[#1E1E1E] border border-[#2E2E2E] rounded-xl p-5 shadow-sm flex flex-col gap-4">
+    <div className="bg-[#1E1E1E] border border-[#2E2E2E] rounded-xl p-3.5 shadow-sm flex flex-col gap-3">
       {/* Top Header Row: Job Name & Status Badge */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
@@ -78,7 +78,11 @@ export const JobProgressCard: React.FC = () => {
             <span className="truncate">{status.jobName || 'No Active Print Job'}</span>
           </div>
           <p className="text-xs text-[#94A3B8] mt-0.5 truncate">
-            {activeContext ? `${activeContext.name} (${activeContext.model})` : '3D Printer'}
+            {activeContext
+              ? activeContext.name.toLowerCase() === activeContext.model.toLowerCase()
+                ? activeContext.name
+                : `${activeContext.name} (${activeContext.model})`
+              : '3D Printer'}
           </p>
         </div>
 
@@ -132,7 +136,7 @@ export const JobProgressCard: React.FC = () => {
             <Clock size={12} /> Time Left
           </span>
           <span className="font-semibold text-[#F3F4F6] mt-0.5">
-            {status.formattedEta || formatTime(status.timeRemaining)}
+            {isCompleted ? 'Done' : (status.formattedEta || formatTime(status.timeRemaining))}
           </span>
         </div>
 
@@ -153,39 +157,6 @@ export const JobProgressCard: React.FC = () => {
           </span>
         </div>
       </div>
-
-      {/* Speed Rate Quick Bar (Active Print) */}
-      {isJobActive && (
-        <div className="flex items-center justify-between p-2 rounded-lg bg-[#262626]/80 border border-[#2E2E2E]">
-          <span className="text-xs font-semibold text-[#D1D5DB] flex items-center gap-1.5">
-            <Gauge size={14} className="text-[#F59E0B]" />
-            Speed
-          </span>
-          <div className="flex items-center gap-1.5">
-            {[
-              { percent: 50, label: '50% Quiet' },
-              { percent: 100, label: '100% Standard' },
-              { percent: 140, label: '140% Sport' },
-            ].map(({ percent, label }) => {
-              const curSpeed = status.printSpeed || 100;
-              const isSelected = Math.abs(curSpeed - percent) < 15;
-              return (
-                <button
-                  key={percent}
-                  onClick={() => setPrintSpeed(percent)}
-                  className={`py-1 px-2.5 rounded text-[11px] font-semibold border transition-all ${
-                    isSelected
-                      ? 'bg-[#F59E0B]/20 border-[#F59E0B] text-[#F59E0B] shadow-sm'
-                      : 'bg-[#1E1E1E] border-[#2E2E2E] text-[#94A3B8] hover:text-[#F3F4F6] hover:border-[#383838]'
-                  }`}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Control Buttons: Pause / Resume & Cancel */}
       {isJobActive && (
