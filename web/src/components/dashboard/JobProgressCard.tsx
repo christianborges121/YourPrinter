@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { Play, Pause, Square, FileText, Clock, Layers } from 'lucide-react';
+import { Play, Pause, Square, FileText, Clock, Layers, CheckCircle2 } from 'lucide-react';
 import { usePrinter } from '../../context/PrinterContext';
 import { StatusBadge } from '../common/StatusBadge';
 import { ConfirmModal } from '../modals/ConfirmModal';
 
 export const JobProgressCard: React.FC = () => {
-  const { status, activeContext, pausePrint, resumePrint, cancelPrint } = usePrinter();
+  const { status, activeContext, pausePrint, resumePrint, cancelPrint, clearStatus } = usePrinter();
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
 
@@ -68,6 +68,16 @@ export const JobProgressCard: React.FC = () => {
     }
   };
 
+  const handleClearStatus = async () => {
+    if (isBusy) return;
+    setIsBusy(true);
+    try {
+      await clearStatus();
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   return (
     <div className="bg-[#1E1E1E] border border-[#2E2E2E] rounded-xl p-3 shadow-sm flex flex-col gap-2.5">
       {/* Top Header Row: Job Name, Printer Model, Status Badge, and Compact Actions */}
@@ -92,6 +102,19 @@ export const JobProgressCard: React.FC = () => {
             isPrinting={isPrinting}
             isCompleted={isCompleted}
           />
+
+          {/* Clear Status Button (shown when completed, finished, cancelled, or error) */}
+          {(isCompleted || /complete|finish|error|abort/i.test(stateStr)) && !isPrinting && (
+            <button
+              onClick={handleClearStatus}
+              disabled={isBusy}
+              title="Clear Status"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#3B82F6]/15 hover:bg-[#3B82F6]/25 text-[#3B82F6] border border-[#3B82F6]/30 transition-all shadow-sm"
+            >
+              <CheckCircle2 size={13} />
+              <span>Clear Status</span>
+            </button>
+          )}
 
           {/* Quick Header Actions: Pause/Resume & Cancel (compacted to save a whole button row) */}
           {isJobActive && (
@@ -176,6 +199,23 @@ export const JobProgressCard: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Completed Banner with Clear Status Action */}
+      {isCompleted && (
+        <div className="flex items-center justify-between bg-[#3B82F6]/10 border border-[#3B82F6]/30 px-3 py-1.5 rounded-lg text-xs text-[#93C5FD]">
+          <div className="flex items-center gap-1.5">
+            <CheckCircle2 size={14} className="text-[#3B82F6] shrink-0" />
+            <span>Print finished successfully!</span>
+          </div>
+          <button
+            onClick={handleClearStatus}
+            disabled={isBusy}
+            className="flex items-center gap-1 px-2.5 py-1 rounded bg-[#3B82F6] hover:bg-[#2563EB] text-white font-medium text-xs transition-colors shadow-sm"
+          >
+            Clear Status
+          </button>
+        </div>
+      )}
 
       {/* Cancel Confirmation Dialog */}
       <ConfirmModal

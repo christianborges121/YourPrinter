@@ -90,6 +90,23 @@ class JobProgressCard extends ConsumerWidget {
                   isPrinting: isPrinting,
                   isCompleted: isCompleted,
                 ),
+                if ((isCompleted || RegExp(r'complete|finish|error|abort', caseSensitive: false).hasMatch(status.printerState)) && !isPrinting) ...[
+                  const SizedBox(width: 6),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.info,
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      minimumSize: Size.zero,
+                      side: BorderSide(color: AppColors.info.withValues(alpha: 0.3)),
+                    ),
+                    onPressed: () async {
+                      await printerService.clearStatus(contextId: activeContext?.contextId);
+                      ref.read(telemetryProvider.notifier).fetchStatus(contextId: activeContext?.contextId);
+                    },
+                    icon: const Icon(LucideIcons.checkCircle2, size: 13),
+                    label: const Text('Clear Status', style: TextStyle(fontSize: 11)),
+                  ),
+                ],
                 if (status.hasActiveJob) ...[
                   const SizedBox(width: 6),
                   IconButton(
@@ -235,7 +252,7 @@ class JobProgressCard extends ConsumerWidget {
                         await printerService.clearStatus(contextId: activeContext?.contextId);
                         ref.read(telemetryProvider.notifier).fetchStatus(contextId: activeContext?.contextId);
                       },
-                      child: const Text('Dismiss', style: TextStyle(fontSize: 10)),
+                      child: const Text('Clear Status', style: TextStyle(fontSize: 10)),
                     ),
                   ],
                 ),

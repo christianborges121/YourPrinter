@@ -40,6 +40,7 @@ interface PrinterContextType {
   pausePrint: () => Promise<boolean>;
   resumePrint: () => Promise<boolean>;
   cancelPrint: () => Promise<boolean>;
+  clearStatus: () => Promise<boolean>;
   homeAxes: () => Promise<boolean>;
   setLed: (on: boolean) => Promise<boolean>;
   setBedTemp: (temp: number) => Promise<boolean>;
@@ -541,6 +542,12 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return res.success;
   }, [activeContextId, refreshStatus]);
 
+  const clearStatus = useCallback(async () => {
+    const res = await api.clearStatus(activeContextId || undefined);
+    if (res.success) await refreshStatus();
+    return res.success;
+  }, [activeContextId, refreshStatus]);
+
   const homeAxes = useCallback(async () => {
     const res = await api.homeAxes(activeContextId || undefined);
     return res.success;
@@ -735,6 +742,7 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
         pausePrint,
         resumePrint,
         cancelPrint,
+        clearStatus,
         homeAxes,
         setLed,
         setBedTemp,

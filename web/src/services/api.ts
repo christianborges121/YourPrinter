@@ -154,6 +154,10 @@ class ApiClient {
     return this.request('/api/printer/control/cancel', { method: 'POST', body: JSON.stringify({ contextId }) });
   }
 
+  async clearStatus(contextId?: string): Promise<{ success: boolean; message?: string }> {
+    return this.request('/api/printer/control/clear-status', { method: 'POST', body: JSON.stringify({ contextId }) });
+  }
+
   async homeAxes(contextId?: string): Promise<{ success: boolean }> {
     return this.request('/api/printer/control/home', { method: 'POST', body: JSON.stringify({ contextId }) });
   }
