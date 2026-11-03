@@ -295,6 +295,38 @@ void main() {
       expect(station.slots[2].isEmpty, true);
     });
 
+    test('MaterialStationStatus correctly isolates active head when same material and color on Head 1 and Head 2', () {
+      final json = {
+        'connected': true,
+        'activeSlot': 1,
+        'overallStatus': 'ready',
+        'slots': [
+          {'slotId': 1, 'materialType': 'ABS', 'materialColor': '#1B1B1B', 'isEmpty': false},
+          {'slotId': 2, 'materialType': 'ABS', 'materialColor': '#1B1B1B', 'isEmpty': false},
+        ],
+      };
+
+      final stationHead1Active = MaterialStationStatus.fromJson(json);
+      expect(stationHead1Active.slots[0].isActive, true, reason: 'Head 1 should be active');
+      expect(stationHead1Active.slots[1].isActive, false, reason: 'Head 2 must NOT be active when Head 1 is active');
+
+      final jsonHead2Active = {
+        ...json,
+        'activeSlot': 2,
+      };
+      final stationHead2Active = MaterialStationStatus.fromJson(jsonHead2Active);
+      expect(stationHead2Active.slots[0].isActive, false, reason: 'Head 1 must NOT be active when Head 2 is active');
+      expect(stationHead2Active.slots[1].isActive, true, reason: 'Head 2 should be active');
+
+      final jsonNoActive = {
+        ...json,
+        'activeSlot': 0,
+      };
+      final stationNoActive = MaterialStationStatus.fromJson(jsonNoActive);
+      expect(stationNoActive.slots[0].isActive, false);
+      expect(stationNoActive.slots[1].isActive, false);
+    });
+
     test('ActiveSpoolData parses Spoolman catalog item and handles defaults', () {
       final json = {
         'id': 42,

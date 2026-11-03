@@ -1088,9 +1088,10 @@ function renderMaterialStationMiniStrip(
       const color = slot.materialColor || (isEmpty ? '#333333' : '#888888');
       const type = isEmpty ? 'Empty' : (slot.materialType || 'PLA').toUpperCase();
       const isActive =
-        station.activeSlot === slot.slotId ||
-        (station.activeSlot !== null && station.activeSlot + 1 === slotNum) ||
-        station.activeSlot === index;
+        station.activeSlot !== null &&
+        station.activeSlot !== undefined &&
+        station.activeSlot > 0 &&
+        (station.activeSlot === slot.slotId || station.activeSlot === slotNum);
 
       const labelPrefix = isMultiHead ? 'Head' : 'Slot';
       const chipBadge = isMultiHead ? `H${slotNum}` : `${slotNum}`;

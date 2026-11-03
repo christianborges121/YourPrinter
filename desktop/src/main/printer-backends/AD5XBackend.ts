@@ -379,6 +379,7 @@ export class AD5XBackend extends DualAPIBackend {
         isEmpty: false,
         materialType: defaultTypes[i] || 'PLA',
         materialColor: defaultColors[i] || '#888888',
+        isActive: false,
       }));
       return {
         connected: true,
