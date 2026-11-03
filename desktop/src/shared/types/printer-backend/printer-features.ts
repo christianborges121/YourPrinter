@@ -140,6 +140,7 @@ export interface MaterialSlotInfo {
   readonly materialType: string | null; // Material name from API (PLA, ABS, etc)
   readonly materialColor: string | null; // Hex color string from API
   readonly isEmpty: boolean; // Inverted from API's hasFilament
+  readonly isActive?: boolean; // True if this slot is the active feeding extruder
 }
 
 /**

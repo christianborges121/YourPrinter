@@ -29,10 +29,9 @@ class MaterialSlot {
     final slotNum = parsedId >= 1 ? parsedId : index + 1;
     final empty = json['isEmpty'] as bool? ?? false;
 
-    final activeFromStation = stationActiveSlot != null &&
-        (stationActiveSlot == parsedId ||
-            stationActiveSlot + 1 == slotNum ||
-            stationActiveSlot == index);
+    final bool activeFromStation = stationActiveSlot != null &&
+        stationActiveSlot > 0 &&
+        (parsedId == stationActiveSlot || slotNum == stationActiveSlot);
     final explicitActive = json['isActive'] as bool? ?? json['active'] as bool? ?? false;
 
     return MaterialSlot(

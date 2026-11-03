@@ -137,9 +137,10 @@ function renderAmsSlots(station: MaterialStationStatus, gridEl: HTMLElement): vo
     .map((slot, index) => {
       const slotNum = slot.slotId >= 1 ? slot.slotId : index + 1;
       const isActive =
-        station.activeSlot === slot.slotId ||
-        (station.activeSlot !== null && station.activeSlot + 1 === slotNum) ||
-        station.activeSlot === index;
+        station.activeSlot !== null &&
+        station.activeSlot !== undefined &&
+        station.activeSlot > 0 &&
+        (station.activeSlot === slot.slotId || station.activeSlot === slotNum);
       const isEmpty = Boolean(slot.isEmpty);
       const color = slot.materialColor || (isEmpty ? '#333333' : '#888888');
       const materialLabel = isEmpty ? 'Empty' : slot.materialType || 'Generic';

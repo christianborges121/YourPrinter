@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Layers, ArrowDown, ArrowUp, RefreshCw, Disc, Plus, Edit2, X } from 'lucide-react';
+import { Layers, ArrowDown, ArrowUp, RefreshCw, Disc, Plus, Edit2, X, Flame, Printer } from 'lucide-react';
 import { usePrinter } from '../../context/PrinterContext';
 import { api } from '../../services/api';
 import type { MaterialSlot } from '../../types';
@@ -186,7 +186,7 @@ export const AmsSpoolCard: React.FC = () => {
     );
   }
 
-  // Hardware AMS Multi-Material View
+  // Hardware AMS / Multi-Head View
   return (
     <div className="bg-[#1E1E1E] border border-[#2E2E2E] rounded-xl p-5 shadow-sm flex flex-col gap-4">
       {/* Header Row */}
@@ -194,13 +194,27 @@ export const AmsSpoolCard: React.FC = () => {
         <div className="flex items-center gap-2">
           <Layers size={16} className="text-[#00AE42]" />
           <span className="text-sm font-semibold text-[#F3F4F6]">
-            {isMultiHead ? 'Multi-Head Toolheads' : 'Multi-Material Spool Station'}
+            Multi Material
           </span>
         </div>
 
         <div className="flex items-center gap-2">
           <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#00AE42]/15 text-[#00AE42] border border-[#00AE42]/30">
-            {materialStation?.overallStatus ? materialStation.overallStatus.toUpperCase() : 'READY'}
+            {isMultiHead ? (
+              materialStation?.activeSlot !== undefined &&
+              materialStation.activeSlot !== null &&
+              materialStation.activeSlot > 0
+                ? `Head ${materialStation.activeSlot} Active`
+                : `${slots.length} Heads Ready`
+            ) : (
+              materialStation?.activeSlot !== undefined &&
+              materialStation.activeSlot !== null &&
+              materialStation.activeSlot > 0
+                ? `Slot ${materialStation.activeSlot} Feeding`
+                : materialStation?.overallStatus
+                ? materialStation.overallStatus.toUpperCase()
+                : 'READY'
+            )}
           </span>
           <button
             onClick={() => refreshStatus()}
@@ -216,7 +230,16 @@ export const AmsSpoolCard: React.FC = () => {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {slots.map((slot, index) => {
           const slotNum = slot.slotId >= 1 ? slot.slotId : index + 1;
-          const isActive = slot.isActive;
+          const activeStationSlot =
+            materialStation?.activeSlot !== undefined &&
+            materialStation.activeSlot !== null &&
+            materialStation.activeSlot > 0
+              ? materialStation.activeSlot
+              : null;
+          const isActive = Boolean(
+            slot.isActive ||
+            (activeStationSlot !== null && (slot.slotId === activeStationSlot || slotNum === activeStationSlot))
+          );
           const isEmpty = slot.isEmpty;
           const colorHex = slot.materialColor || (isEmpty ? '#333333' : '#00AE42');
           const isSlotBusy = busySlot === slot.slotId;
@@ -234,7 +257,7 @@ export const AmsSpoolCard: React.FC = () => {
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-1.5">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-[#94A3B8] bg-[#1E1E1E] px-1.5 py-0.5 rounded border border-[#2E2E2E]">
-                    {isMultiHead ? `Tool T${index}` : `Slot ${slotNum}`}
+                    {isMultiHead ? `Head ${slotNum}` : `Slot ${slotNum}`}
                   </span>
                   {isMultiHead && status?.toolTemps && index < status.toolTemps.length && (
                     <span className="text-[10px] font-mono text-[#D1D5DB] bg-[#1E1E1E] px-1.5 py-0.5 rounded border border-[#2E2E2E]">
@@ -276,8 +299,25 @@ export const AmsSpoolCard: React.FC = () => {
                 </div>
               </div>
 
-              {/* Action Buttons: Load / Unload */}
-              {!isMultiHead && (
+              {/* Bottom Action Row: Multi-Head Tool Pill OR AMS Load / Unload Buttons */}
+              {isMultiHead ? (
+                <div className="mt-2 pt-2 border-t border-[#2E2E2E]/60">
+                  <div
+                    className={`w-full flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-[10px] font-semibold border transition-all ${
+                      isActive
+                        ? 'bg-[#00AE42]/15 border-[#00AE42]/40 text-[#00AE42]'
+                        : 'bg-[#1E1E1E] border-[#2E2E2E] text-[#94A3B8]'
+                    }`}
+                  >
+                    {isActive ? (
+                      <Flame size={12} className="text-[#00AE42]" />
+                    ) : (
+                      <Printer size={12} className="text-[#94A3B8]" />
+                    )}
+                    <span>{isActive ? 'Active Extruder' : 'Direct Feed'}</span>
+                  </div>
+                </div>
+              ) : (
                 <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-[#2E2E2E]/60">
                   <button
                     onClick={() => handleLoad(slot.slotId)}
