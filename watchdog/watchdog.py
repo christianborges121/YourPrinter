@@ -93,7 +93,100 @@ WATCHDOG_API_PORT = int(os.getenv("WATCHDOG_API_PORT", "8085"))
 AUTO_PAUSE_ON_FAILURE = os.getenv("AUTO_PAUSE_ON_FAILURE", "true").lower() == "true"
 FLASHFORGE_UI_URL = os.getenv("FLASHFORGE_UI_URL", "http://yourprinter:3000").rstrip("/")
 SNAPSHOTS_DIR = os.getenv("SNAPSHOTS_DIR", "/app/snapshots")
+WATCHDOG_CONFIG_FILE = os.path.join(SNAPSHOTS_DIR, "watchdog_config.json")
 # =======================================================
+
+
+def load_local_config():
+    """Loads locally persisted watchdog config from SNAPSHOTS_DIR if present."""
+    global CONFIDENCE_THRESHOLD, CONSECUTIVE_REQUIRED, CHECK_INTERVAL_SEC, AUTO_PAUSE_ON_FAILURE
+    if not os.path.exists(WATCHDOG_CONFIG_FILE):
+        return False
+    try:
+        with open(WATCHDOG_CONFIG_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if "threshold" in data and data["threshold"] is not None:
+            CONFIDENCE_THRESHOLD = float(data["threshold"])
+        if "consecutive_required" in data and data["consecutive_required"] is not None:
+            CONSECUTIVE_REQUIRED = int(data["consecutive_required"])
+        if "check_interval_sec" in data and data["check_interval_sec"] is not None:
+            CHECK_INTERVAL_SEC = int(data["check_interval_sec"])
+        if "auto_pause_enabled" in data and data["auto_pause_enabled"] is not None:
+            AUTO_PAUSE_ON_FAILURE = bool(data["auto_pause_enabled"])
+        print(f"[⚙️ Config Loaded: Local File] Threshold: {CONFIDENCE_THRESHOLD}, Consecutive: {CONSECUTIVE_REQUIRED}, Interval: {CHECK_INTERVAL_SEC}s, Auto-Pause: {AUTO_PAUSE_ON_FAILURE}", flush=True)
+        return True
+    except Exception as e:
+        print(f"[!] Warning: Could not read {WATCHDOG_CONFIG_FILE}: {e}", flush=True)
+        return False
+
+
+def save_local_config():
+    """Persists current watchdog config to SNAPSHOTS_DIR."""
+    try:
+        os.makedirs(SNAPSHOTS_DIR, exist_ok=True)
+        cfg = {
+            "threshold": CONFIDENCE_THRESHOLD,
+            "consecutive_required": CONSECUTIVE_REQUIRED,
+            "check_interval_sec": CHECK_INTERVAL_SEC,
+            "auto_pause_enabled": AUTO_PAUSE_ON_FAILURE,
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+        with open(WATCHDOG_CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, indent=2)
+    except Exception as e:
+        print(f"[!] Warning: Could not write {WATCHDOG_CONFIG_FILE}: {e}", flush=True)
+
+
+def fetch_and_apply_remote_config():
+    """Fetches saved Watchdog configuration from YourPrinter backend (/api/watchdog/config)."""
+    global CONFIDENCE_THRESHOLD, CONSECUTIVE_REQUIRED, CHECK_INTERVAL_SEC, AUTO_PAUSE_ON_FAILURE
+    if not FLASHFORGE_UI_URL:
+        return False
+
+    url = f"{FLASHFORGE_UI_URL.rstrip('/')}/api/watchdog/config"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Obico-Stream-Watchdog/2.0"})
+        with urllib.request.urlopen(req, timeout=4) as resp:
+            if resp.status == 200:
+                data = json.loads(resp.read().decode('utf-8', errors='ignore'))
+                if data.get("success") and "config" in data:
+                    cfg = data["config"]
+                    changed = False
+                    if "threshold" in cfg and cfg["threshold"] is not None:
+                        new_th = float(cfg["threshold"])
+                        if abs(new_th - CONFIDENCE_THRESHOLD) > 0.001:
+                            CONFIDENCE_THRESHOLD = new_th
+                            changed = True
+                    if "consecutive_required" in cfg and cfg["consecutive_required"] is not None:
+                        new_cr = int(cfg["consecutive_required"])
+                        if new_cr != CONSECUTIVE_REQUIRED:
+                            CONSECUTIVE_REQUIRED = new_cr
+                            changed = True
+                    if "check_interval_sec" in cfg and cfg["check_interval_sec"] is not None:
+                        new_ci = int(cfg["check_interval_sec"])
+                        if new_ci != CHECK_INTERVAL_SEC:
+                            CHECK_INTERVAL_SEC = new_ci
+                            changed = True
+                    if "auto_pause_enabled" in cfg and cfg["auto_pause_enabled"] is not None:
+                        new_ap = bool(cfg["auto_pause_enabled"])
+                        if new_ap != AUTO_PAUSE_ON_FAILURE:
+                            AUTO_PAUSE_ON_FAILURE = new_ap
+                            changed = True
+
+                    if changed:
+                        with state_lock:
+                            for t in printer_trackers.values():
+                                t["threshold"] = CONFIDENCE_THRESHOLD
+                                t["consecutive_required"] = CONSECUTIVE_REQUIRED
+                                t["auto_pause_enabled"] = AUTO_PAUSE_ON_FAILURE
+                                t["check_interval_sec"] = CHECK_INTERVAL_SEC
+                        update_aggregate_state()
+                        save_local_config()
+                        print(f"[⚙️ Config Synced from WebUI] Threshold: {CONFIDENCE_THRESHOLD}, Consecutive: {CONSECUTIVE_REQUIRED}, Interval: {CHECK_INTERVAL_SEC}s, Auto-Pause: {AUTO_PAUSE_ON_FAILURE}", flush=True)
+                    return True
+    except Exception:
+        pass
+    return False
 
 # Load Obico ML libraries
 sys.path.insert(0, '/app/obico/ml_api')
@@ -299,25 +392,38 @@ def list_snapshots(folder, filter_slug=None):
     return results
 
 
+_last_webhook_fetch = 0
+_cached_webui_webhook = None
+
+
 def get_effective_discord_webhook():
-    """Returns the active Discord webhook URL, resolving from environment or WebUI settings."""
-    global DISCORD_WEBHOOK
+    """Returns the active Discord webhook URL, resolving from WebUI settings first, then environment."""
+    global DISCORD_WEBHOOK, _last_webhook_fetch, _cached_webui_webhook
+    now = time.time()
+
+    # Query WebUI notification endpoint every 10 seconds for dynamic updates
+    if now - _last_webhook_fetch > 10:
+        _last_webhook_fetch = now
+        try:
+            url = f"{FLASHFORGE_UI_URL.rstrip('/')}/api/notifications/discord"
+            req = urllib.request.Request(url, headers={"User-Agent": "Obico-Stream-Watchdog/2.0"})
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                if resp.status == 200:
+                    data = json.loads(resp.read().decode('utf-8', errors='ignore'))
+                    wh = (data.get("webhookUrl") or "").strip()
+                    if wh and wh.startswith("http"):
+                        _cached_webui_webhook = wh
+                    elif data.get("success"):
+                        _cached_webui_webhook = ""  # Explicitly cleared in WebUI
+        except Exception:
+            pass
+
+    if _cached_webui_webhook:
+        return _cached_webui_webhook
+
     if DISCORD_WEBHOOK and DISCORD_WEBHOOK.strip():
         return DISCORD_WEBHOOK.strip()
 
-    # Dynamic fallback: check WebUI notifications API
-    try:
-        url = f"{FLASHFORGE_UI_URL.rstrip('/')}/api/notifications/discord"
-        req = urllib.request.Request(url, headers={"User-Agent": "Obico-Stream-Watchdog/2.0"})
-        with urllib.request.urlopen(req, timeout=3) as resp:
-            if resp.status == 200:
-                data = json.loads(resp.read().decode('utf-8', errors='ignore'))
-                wh = (data.get("webhookUrl") or "").strip()
-                if wh:
-                    DISCORD_WEBHOOK = wh
-                    return wh
-    except Exception:
-        pass
     return ""
 
 
@@ -449,6 +555,7 @@ def fetch_fleet_printers():
 
 def sync_fleet_trackers():
     """Synchronizes local printer trackers with configured printers in FlashForgeUI."""
+    fetch_and_apply_remote_config()
     fleet = fetch_fleet_printers()
     with state_lock:
         if fleet and isinstance(fleet, list) and len(fleet) > 0:
@@ -499,6 +606,7 @@ def sync_fleet_trackers():
                         "consecutive_failures": 0,
                         "consecutive_required": CONSECUTIVE_REQUIRED,
                         "threshold": CONFIDENCE_THRESHOLD,
+                        "check_interval_sec": CHECK_INTERVAL_SEC,
                         "inference_time_ms": 0,
                         "last_check": None,
                         "active_job": None,
@@ -554,6 +662,7 @@ def sync_fleet_trackers():
                     "consecutive_failures": 0,
                     "consecutive_required": CONSECUTIVE_REQUIRED,
                     "threshold": CONFIDENCE_THRESHOLD,
+                    "check_interval_sec": CHECK_INTERVAL_SEC,
                     "inference_time_ms": 0,
                     "last_check": None,
                     "active_job": None,
@@ -594,6 +703,7 @@ def tracker_to_public_status(t):
         "printer_name": t.get("name", PRINTER_NAME),
         "printer_model": t.get("model", ""),
         "context_id": t.get("context_id", ""),
+        "check_interval_sec": t.get("check_interval_sec", CHECK_INTERVAL_SEC),
     }
 
 
@@ -843,8 +953,10 @@ class WatchdogAPIHandler(http.server.BaseHTTPRequestHandler):
                         t["threshold"] = CONFIDENCE_THRESHOLD
                         t["consecutive_required"] = CONSECUTIVE_REQUIRED
                         t["auto_pause_enabled"] = AUTO_PAUSE_ON_FAILURE
+                        t["check_interval_sec"] = CHECK_INTERVAL_SEC
 
                 update_aggregate_state()
+                save_local_config()
                 print(f"[⚙️ Config Updated] Threshold: {CONFIDENCE_THRESHOLD}, Consecutive: {CONSECUTIVE_REQUIRED}, Interval: {CHECK_INTERVAL_SEC}s, Auto-Pause: {AUTO_PAUSE_ON_FAILURE}", flush=True)
 
                 self.send_response(200)
@@ -899,8 +1011,16 @@ def start_api_server(port):
 def main():
     print(f"[*] Starting Obico Multi-Printer Watchdog for YourPrinter...", flush=True)
     print(f"    YourPrinter Backend: {FLASHFORGE_UI_URL}", flush=True)
+
+    # 1. Load locally cached config file if present
+    load_local_config()
+    # 2. Fetch persistent config from YourPrinter backend
+    fetch_and_apply_remote_config()
+
     print(f"    Check Interval: {CHECK_INTERVAL_SEC}s", flush=True)
     print(f"    Alert Cooldown: {ALERT_COOLDOWN_SEC}s", flush=True)
+    print(f"    Confidence Threshold: {CONFIDENCE_THRESHOLD}", flush=True)
+    print(f"    Consecutive Required: {CONSECUTIVE_REQUIRED}", flush=True)
     print(f"    Auto-Pause On Failure: {AUTO_PAUSE_ON_FAILURE}", flush=True)
     active_wh = get_effective_discord_webhook()
     if active_wh:
