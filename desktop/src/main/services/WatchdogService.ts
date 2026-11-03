@@ -55,7 +55,18 @@ export class WatchdogService {
 
   public getCachedStatus(contextId?: string): WatchdogStatus {
     const key = contextId || '__default__';
-    const cached = this.statusCache.get(key) || (key !== '__default__' ? this.statusCache.get('__default__') : undefined);
+    let cached = this.statusCache.get(key);
+    if (!cached && key !== '__default__') {
+      cached = this.statusCache.get('__default__');
+    }
+    if (!cached) {
+      // Find the most recently updated entry across all cached printers
+      for (const entry of this.statusCache.values()) {
+        if (!cached || entry.timestamp > cached.timestamp) {
+          cached = entry;
+        }
+      }
+    }
     if (cached) {
       return cached.status;
     }
@@ -126,9 +137,7 @@ export class WatchdogService {
             check_interval_sec: Number(data.check_interval_sec || 15),
           };
           this.statusCache.set(key, { status, timestamp: now });
-          if (!this.statusCache.has('__default__') || key === '__default__') {
-            this.statusCache.set('__default__', { status, timestamp: now });
-          }
+          this.statusCache.set('__default__', { status, timestamp: now });
           return status;
         }
       } catch {
@@ -137,23 +146,30 @@ export class WatchdogService {
         this.activeFetches.delete(key);
       }
 
-      const offlineStatus: WatchdogStatus = {
-        online: false,
-        state: 'offline',
-        confidence: 0,
-        consecutive_failures: 0,
-        consecutive_required: 2,
-        threshold: 0.2,
-        inference_time_ms: 0,
-        last_check: null,
-        active_job: null,
-        layer: null,
-        auto_pause_enabled: true,
-        auto_pause_triggered: false,
-        total_inspections: 0,
-        total_failures_detected: 0,
-        printer_status: 'unknown',
-      };
+      // Preserve existing telemetry on transient fetch error rather than destroying alert state
+      const existing = this.statusCache.get(key) || this.statusCache.get('__default__');
+      const offlineStatus: WatchdogStatus = existing
+        ? {
+            ...existing.status,
+            online: false,
+          }
+        : {
+            online: false,
+            state: 'offline',
+            confidence: 0,
+            consecutive_failures: 0,
+            consecutive_required: 2,
+            threshold: 0.2,
+            inference_time_ms: 0,
+            last_check: null,
+            active_job: null,
+            layer: null,
+            auto_pause_enabled: true,
+            auto_pause_triggered: false,
+            total_inspections: 0,
+            total_failures_detected: 0,
+            printer_status: 'unknown',
+          };
       this.statusCache.set(key, { status: offlineStatus, timestamp: now });
       return offlineStatus;
     })();
