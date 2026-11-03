@@ -444,10 +444,12 @@ export class WebSocketManager extends EventEmitter {
     try {
       // Use latest polling data if available
       if (this.latestPollingData) {
+        const contextId = (this.latestPollingData as unknown as { contextId?: string }).contextId;
         const statusMessage: WebSocketMessage = {
           type: 'STATUS_UPDATE',
           timestamp: new Date().toISOString(),
-          status: this.formatPollingData(this.latestPollingData),
+          status: this.formatPollingData(this.latestPollingData, contextId),
+          contextId,
         };
         this.sendToClient(ws, statusMessage);
       } else {
@@ -471,10 +473,12 @@ export class WebSocketManager extends EventEmitter {
     try {
       // Use latest polling data instead of calling backend directly
       if (this.latestPollingData) {
+        const contextId = (this.latestPollingData as unknown as { contextId?: string }).contextId;
         const statusMessage: WebSocketMessage = {
           type: 'STATUS_UPDATE',
           timestamp: new Date().toISOString(),
-          status: this.formatPollingData(this.latestPollingData),
+          status: this.formatPollingData(this.latestPollingData, contextId),
+          contextId,
         };
         this.sendToClient(ws, statusMessage);
       } else {
@@ -650,7 +654,7 @@ export class WebSocketManager extends EventEmitter {
       // Backend provides filament usage in meters, same as main UI
       cumulativeFilament: status.cumulativeStats?.totalFilamentUsed || undefined,
       cumulativePrintTime: status.cumulativeStats?.totalPrintTime || undefined,
-      watchdog: getWatchdogService().getCachedStatus(),
+      watchdog: getWatchdogService().getCachedStatus(contextId),
     };
   }
 

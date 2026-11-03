@@ -999,9 +999,13 @@ class WatchdogAPIHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
 
 
+class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
+
 def start_api_server(port):
-    server = socketserver.TCPServer(("0.0.0.0", port), WatchdogAPIHandler)
-    server.allow_reuse_address = True
+    server = ThreadedTCPServer(("0.0.0.0", port), WatchdogAPIHandler)
     print(f"[🌐 API] Watchdog REST API server listening on 0.0.0.0:{port}", flush=True)
     server.serve_forever()
 

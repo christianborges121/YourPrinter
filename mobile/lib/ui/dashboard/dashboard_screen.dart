@@ -171,7 +171,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             builder: (ctx) {
               final watchdog = telemetry.status?.watchdog;
               final isOnline = watchdog?.online ?? false;
-              final isAlert = isOnline && (watchdog?.confidence ?? 0.0) >= (watchdog?.threshold ?? 0.20);
+              final isAlert = isOnline &&
+                  ((watchdog?.autoPauseTriggered ?? false) ||
+                      ((watchdog?.confidence ?? 0.0) >= (watchdog?.threshold ?? 0.20) &&
+                          (watchdog?.consecutiveFailures ?? 0) >= (watchdog?.consecutiveRequired ?? 2)));
               final icon = isOnline ? LucideIcons.shieldCheck : LucideIcons.shieldAlert;
               final color = !isOnline
                   ? AppColors.textMuted

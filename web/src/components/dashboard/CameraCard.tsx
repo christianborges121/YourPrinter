@@ -69,7 +69,11 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
   const snapshotPollTimerRef = useRef<number | null>(null);
 
   const watchdog = status?.watchdog;
-  const isAlert = watchdog?.auto_pause_triggered || (watchdog?.confidence ?? 0) >= (watchdog?.threshold ?? 0.2);
+  const isAlert =
+    Boolean(watchdog?.auto_pause_triggered) ||
+    (Boolean(watchdog?.online) &&
+      (watchdog?.confidence ?? 0) >= (watchdog?.threshold ?? 0.2) &&
+      (watchdog?.consecutive_failures ?? 0) >= (watchdog?.consecutive_required ?? 2));
 
   // Toggle Continuous Streaming
   const handleToggleContinuous = () => {

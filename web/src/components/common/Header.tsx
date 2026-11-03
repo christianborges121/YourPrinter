@@ -45,7 +45,11 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, onTabChange, onOpenWa
   const [isAddPrinterOpen, setIsAddPrinterOpen] = useState(false);
 
   const watchdog = status?.watchdog;
-  const isWatchdogAlert = watchdog?.auto_pause_triggered || (watchdog?.confidence ?? 0) >= (watchdog?.threshold ?? 0.2);
+  const isWatchdogAlert =
+    Boolean(watchdog?.auto_pause_triggered) ||
+    (Boolean(watchdog?.online) &&
+      (watchdog?.confidence ?? 0) >= (watchdog?.threshold ?? 0.2) &&
+      (watchdog?.consecutive_failures ?? 0) >= (watchdog?.consecutive_required ?? 2));
 
   const handleRefresh = async () => {
     setIsRefreshing(true);

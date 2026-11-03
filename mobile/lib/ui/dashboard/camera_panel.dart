@@ -273,7 +273,11 @@ class CameraPanel extends ConsumerWidget {
     final isOnline = watchdog?.online ?? false;
     final confidence = watchdog?.confidence ?? 0.0;
     final threshold = watchdog?.threshold ?? 0.20;
-    final isAlert = isOnline && confidence >= threshold;
+    final consecutiveFailures = watchdog?.consecutiveFailures ?? 0;
+    final consecutiveRequired = watchdog?.consecutiveRequired ?? 2;
+    final isAlert = isOnline &&
+        ((watchdog?.autoPauseTriggered ?? false) ||
+            (confidence >= threshold && consecutiveFailures >= consecutiveRequired));
 
     final String label;
     final Color statusColor;

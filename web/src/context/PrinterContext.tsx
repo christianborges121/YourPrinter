@@ -287,9 +287,22 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
           ? stabilized.printSpeed
           : prevStatus?.printSpeed || 100;
 
+      const isPausedOrPausing = /pause/i.test(stateStr);
+      // Stabilize watchdog telemetry: prevent alert dropout while printer remains paused on defect
+      const effectiveWatchdog =
+        stabilized.watchdog && stabilized.watchdog.online
+          ? stabilized.watchdog
+          : prevStatus?.watchdog?.auto_pause_triggered && isPausedOrPausing
+          ? {
+              ...prevStatus.watchdog,
+              ...(stabilized.watchdog ? { online: stabilized.watchdog.online } : {}),
+            }
+          : stabilized.watchdog || prevStatus?.watchdog;
+
       return {
         ...prevStatus,
         ...stabilized,
+        watchdog: effectiveWatchdog,
         coolingFanSpeed: coolingFan,
         fanSpeed: coolingFan,
         chamberFanSpeed: chamberFan,

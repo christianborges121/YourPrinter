@@ -60,7 +60,11 @@ export const WatchdogModal: React.FC<WatchdogModalProps> = ({ isOpen, onClose })
   };
 
   const confidencePct = Math.round((watchdog?.confidence || 0) * 100);
-  const isAlert = watchdog?.auto_pause_triggered || (watchdog?.confidence ?? 0) >= threshold;
+  const isAlert =
+    Boolean(watchdog?.auto_pause_triggered) ||
+    (Boolean(watchdog?.online) &&
+      (watchdog?.confidence ?? 0) >= threshold &&
+      (watchdog?.consecutive_failures ?? 0) >= consecutiveRequired);
 
   return (
     <Modal

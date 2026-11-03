@@ -106,7 +106,11 @@ class _WatchdogSheetState extends ConsumerState<WatchdogSheet> {
                 Icon(
                   (watchdog?.online ?? false) ? LucideIcons.shieldCheck : LucideIcons.shieldAlert,
                   color: (watchdog?.online ?? false)
-                      ? ((watchdog?.confidence ?? 0.0) >= _threshold ? AppColors.error : AppColors.accentGreen)
+                      ? (((watchdog?.autoPauseTriggered ?? false) ||
+                              ((watchdog?.confidence ?? 0.0) >= _threshold &&
+                                  (watchdog?.consecutiveFailures ?? 0) >= (watchdog?.consecutiveRequired ?? 2)))
+                          ? AppColors.error
+                          : AppColors.accentGreen)
                       : AppColors.textMuted,
                   size: 20,
                 ),
