@@ -176,7 +176,18 @@ export class WatchdogService {
       });
       if (resp.ok) {
         const data = (await resp.json()) as { success: boolean; config?: unknown };
-        this.statusCache.clear(); // Invalidate all cached status
+        for (const [key, entry] of this.statusCache.entries()) {
+          this.statusCache.set(key, {
+            status: {
+              ...entry.status,
+              threshold: config.threshold ?? entry.status.threshold,
+              consecutive_required: config.consecutive_required ?? entry.status.consecutive_required,
+              auto_pause_enabled: config.auto_pause_enabled ?? entry.status.auto_pause_enabled,
+              check_interval_sec: config.check_interval_sec ?? entry.status.check_interval_sec,
+            },
+            timestamp: Date.now(),
+          });
+        }
         return data;
       }
       return { success: false, error: `HTTP ${resp.status}` };

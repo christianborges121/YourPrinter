@@ -108,6 +108,10 @@ export interface AppConfig {
   readonly WebUITheme: ThemeColors;
   readonly desktopThemeProfiles: readonly ThemeProfile[];
   readonly webUIThemeProfiles: readonly ThemeProfile[];
+  readonly WatchdogThreshold: number;
+  readonly WatchdogConsecutiveRequired: number;
+  readonly WatchdogAutoPauseEnabled: boolean;
+  readonly WatchdogCheckIntervalSec: number;
 }
 
 /**
@@ -147,6 +151,10 @@ export interface MutableAppConfig {
   WebUITheme: ThemeColors;
   desktopThemeProfiles: readonly ThemeProfile[];
   webUIThemeProfiles: readonly ThemeProfile[];
+  WatchdogThreshold: number;
+  WatchdogConsecutiveRequired: number;
+  WatchdogAutoPauseEnabled: boolean;
+  WatchdogCheckIntervalSec: number;
 }
 
 /**
@@ -291,6 +299,10 @@ export const DEFAULT_CONFIG: AppConfig = {
   WebUITheme: DEFAULT_THEME,
   desktopThemeProfiles: [...SYSTEM_THEME_PROFILES],
   webUIThemeProfiles: [...SYSTEM_THEME_PROFILES],
+  WatchdogThreshold: 0.20,
+  WatchdogConsecutiveRequired: 2,
+  WatchdogAutoPauseEnabled: true,
+  WatchdogCheckIntervalSec: 15,
 } as const;
 
 /**

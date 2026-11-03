@@ -10,8 +10,25 @@ import { getWatchdogService } from '../../../services/WatchdogService.js';
 import type { AuthenticatedRequest } from '../auth-middleware.js';
 import type { RouteDependencies } from './route-helpers.js';
 
-export function registerWatchdogRoutes(router: Router, _deps: RouteDependencies): void {
+export function registerWatchdogRoutes(router: Router, deps: RouteDependencies): void {
   const watchdog = getWatchdogService();
+
+  router.get('/watchdog/config', async (_req: AuthenticatedRequest, res: Response) => {
+    try {
+      const config = deps.configManager.getConfig();
+      return res.json({
+        success: true,
+        config: {
+          threshold: config.WatchdogThreshold,
+          consecutive_required: config.WatchdogConsecutiveRequired,
+          auto_pause_enabled: config.WatchdogAutoPauseEnabled,
+          check_interval_sec: config.WatchdogCheckIntervalSec,
+        },
+      });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e instanceof Error ? e.message : 'Unknown error' });
+    }
+  });
 
   router.get('/watchdog/status', async (req: AuthenticatedRequest, res: Response) => {
     try {
@@ -68,7 +85,27 @@ export function registerWatchdogRoutes(router: Router, _deps: RouteDependencies)
 
   router.post('/watchdog/config', async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const result = await watchdog.updateConfig(req.body || {});
+      const body = req.body || {};
+      const updates: Record<string, unknown> = {};
+
+      if (typeof body.threshold === 'number' && !isNaN(body.threshold)) {
+        updates.WatchdogThreshold = Math.max(0.01, Math.min(1.0, body.threshold));
+      }
+      if (typeof body.consecutive_required === 'number' && !isNaN(body.consecutive_required)) {
+        updates.WatchdogConsecutiveRequired = Math.max(1, Math.min(10, Math.round(body.consecutive_required)));
+      }
+      if (typeof body.auto_pause_enabled === 'boolean') {
+        updates.WatchdogAutoPauseEnabled = body.auto_pause_enabled;
+      }
+      if (typeof body.check_interval_sec === 'number' && !isNaN(body.check_interval_sec)) {
+        updates.WatchdogCheckIntervalSec = Math.max(2, Math.min(300, Math.round(body.check_interval_sec)));
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await deps.configManager.updateConfig(updates);
+      }
+
+      const result = await watchdog.updateConfig(body);
       return res.json(result);
     } catch (e) {
       return res.status(500).json({ success: false, error: e instanceof Error ? e.message : 'Unknown error' });
