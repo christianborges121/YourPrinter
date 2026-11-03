@@ -95,7 +95,7 @@ flutter test
 flutter build apk --release
 ```
 
-- Every push to `master` automatically increments the mobile app patch version by `0.0.1` (unless `[skip bump]` or `[version: X.Y.Z]` is included in the commit message) and publishes a single universal `YourPrinter-vX.Y.Z.apk` directly to [GitHub Releases](../../releases).
+- Every push to `master` automatically increments the mobile app patch version by `0.0.1` (unless `[skip bump]` or `[version: X.Y.Z]` is included in the commit message) and publishes optimized per-architecture APKs (`arm64-v8a`, `armeabi-v7a`, `x86_64`) directly to [GitHub Releases](../../releases).
 
 ---
 

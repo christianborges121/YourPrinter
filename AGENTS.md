@@ -16,7 +16,7 @@ Guidelines and rules for AI agents working in this unified repository (`desktop/
      ```
    - Commit and test iterative phase milestones on the feature branch.
 2. **Master Branch Protection & Releases**:
-   - Every push to `master` automatically triggers CI (`.github/workflows/build-and-release-apk.yml`) to increment the mobile app version by `0.0.1` and publish a new universal `YourPrinter-vX.Y.Z.apk` to GitHub Releases.
+   - Every push to `master` automatically triggers CI (`.github/workflows/build-and-release-apk.yml`) to increment the mobile app version by `0.0.1` and publish optimized per-architecture APKs to GitHub Releases.
    - Do **not** push intermediate or incomplete phases directly to `master`.
    - Merge or PR feature branches into `master` only when all phases are complete, tests pass (100%), and functionality is verified.
 

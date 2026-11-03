@@ -17,14 +17,15 @@ Cross-platform 3D printing telemetry, multi-camera streaming, and print manageme
 
 ## 📦 Download APK (Direct Android Install)
 
-You only need **one single universal APK** that works on all Android devices (smartphones, tablets, and emulators). No unzipping required.
+Optimized architecture-specific APKs are published with every release (~65% smaller downloads, ~30 MB):
 
 👉 **[Download the Latest APK from GitHub Releases](https://github.com/christianborges121/YourPrinter/releases/latest)**
 
-- File format: `YourPrinter-vX.Y.Z.apk` (direct `.apk` download, not a zip)
-- Compatible with Android 5.0+ (Lollipop through Android 15+)
-- Includes native support for ARM64 (`arm64-v8a`), ARMv7 (`armeabi-v7a`), and x86_64.
-- **Signing Certificate Fingerprint (SHA-256):** `F5:AF:A5:BB:E8:0E:19:5D:EB:D8:27:ED:16:54:29:35:24:A3:7C:F2:CB:A0:B5:86:6E:93:C2:E1:7D:50:7C:E3` (persistent release keystore for seamless Obtainium updates)
+- **`arm64-v8a` (Recommended)**: For almost all modern Android phones and tablets (~30 MB).
+- **`armeabi-v7a`**: For older 32-bit Android devices (~24 MB).
+- **`x86_64`**: For Android emulators and Intel-based tablets (~36 MB).
+- **Obtainium Compatible**: Works automatically with Obtainium app updater (selects `arm64-v8a`).
+- **Signing Certificate Fingerprint (SHA-256):** `F5:AF:A5:BB:E8:0E:19:5D:EB:D8:27:ED:16:54:29:35:24:A3:7C:F2:CB:A0:B5:86:6E:93:C2:E1:7D:50:7C:E3` (persistent release keystore for seamless updates)
 
 ---
 
@@ -53,6 +54,6 @@ flutter analyze
 # Run unit and widget tests
 flutter test
 
-# Build single universal release APK
-flutter build apk --release
+# Build split release APKs (~30 MB each)
+flutter build apk --release --split-per-abi
 ```
