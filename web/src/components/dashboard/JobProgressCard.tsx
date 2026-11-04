@@ -193,12 +193,19 @@ export const JobProgressCard: React.FC = () => {
             </span>
           </div>
 
-          {(status.estimatedLength || status.estimatedWeight) && (
+          {Boolean(
+            (status.estimatedLength && status.estimatedLength > 0) ||
+            (status.estimatedWeight && status.estimatedWeight > 0)
+          ) && (
             <div className="hidden sm:flex items-center gap-1 text-[#94A3B8]">
               <span>Filament:</span>
               <span className="font-semibold text-[#F3F4F6]">
-                {status.estimatedLength ? `${(status.estimatedLength / 1000).toFixed(1)}m` : ''}
-                {status.estimatedWeight ? ` (${status.estimatedWeight.toFixed(0)}g)` : ''}
+                {status.estimatedLength && status.estimatedLength > 0
+                  ? `${(status.estimatedLength / 1000).toFixed(1)}m`
+                  : ''}
+                {status.estimatedWeight && status.estimatedWeight > 0
+                  ? ` (${status.estimatedWeight.toFixed(0)}g)`
+                  : ''}
               </span>
             </div>
           )}
