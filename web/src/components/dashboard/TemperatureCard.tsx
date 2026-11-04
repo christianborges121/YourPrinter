@@ -51,6 +51,8 @@ export const TemperatureCard: React.FC = () => {
       : [status.nozzleTargetTemperature];
   const hasMultipleTools = toolTemps.length > 1;
 
+  const isMultiHead = hasMultipleTools || isCreator5;
+
   const openBedModal = () => {
     setModalConfig({
       isOpen: true,
@@ -65,16 +67,16 @@ export const TemperatureCard: React.FC = () => {
   const TOOL_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EC4899'];
 
   const getToolLabel = (idx: number, total: number) => {
-    if (total <= 1) return 'Nozzle';
-    if (total === 2) return idx === 0 ? 'T0 Left' : 'T1 Right';
-    return `Tool T${idx}`;
+    if (isMultiHead || total > 1) return `Head ${idx + 1}`;
+    return 'Nozzle';
   };
 
   const openExtruderModal = (index: number) => {
     const curTarget = index < toolTargets.length ? toolTargets[index] : status.nozzleTargetTemperature;
+    const label = getToolLabel(index, toolTemps.length);
     setModalConfig({
       isOpen: true,
-      title: hasMultipleTools ? `Set ${getToolLabel(index, toolTemps.length)} Temperature` : 'Set Nozzle Temperature',
+      title: `Set ${label} Temperature`,
       currentVal: curTarget,
       maxTemp: capabilities?.maxExtruderTemp || 320,
       isExtruder: true,

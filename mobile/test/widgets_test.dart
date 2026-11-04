@@ -178,6 +178,8 @@ PrinterStatusData createTestStatus({
   int totalLayers = 0,
   double printSpeed = 100.0,
   double coolingFanSpeed = 0.0,
+  List<double> toolTemps = const [],
+  List<double> toolTargetTemps = const [],
 }) {
   return PrinterStatusData(
     printerState: printerState,
@@ -192,6 +194,8 @@ PrinterStatusData createTestStatus({
     totalLayers: totalLayers,
     printSpeed: printSpeed,
     coolingFanSpeed: coolingFanSpeed,
+    toolTemps: toolTemps,
+    toolTargetTemps: toolTargetTemps,
   );
 }
 
@@ -812,6 +816,77 @@ void main() {
       // Dialog should close and setChamberTemp(70) should be called
       expect(find.text('Set Chamber Temperature'), findsNothing);
       expect(mockPrinterService.lastChamberTempSet, 70.0);
+    });
+
+    testWidgets('Multi-tool Creator 5 Pro renders Head 1 and Head 2 instead of T0/T1 or Tool labels', (WidgetTester tester) async {
+      final mockStatus = createTestStatus(
+        printerState: 'IDLE',
+        nozzleTemperature: 210.0,
+        nozzleTargetTemperature: 210.0,
+        bedTemperature: 60.0,
+        bedTargetTemperature: 60.0,
+        toolTemps: [210.0, 220.0],
+        toolTargetTemps: [210.0, 220.0],
+      );
+
+      final telemetryState = TelemetryState(
+        isLoading: false,
+        status: mockStatus,
+        features: const PrinterFeatures(
+          hasCamera: false,
+          hasLED: true,
+          hasFiltration: false,
+          hasMaterialStation: false,
+          canPause: true,
+          canResume: true,
+          canCancel: true,
+          ledUsesLegacyAPI: false,
+        ),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            preferencesServiceProvider.overrideWithValue(testPrefs),
+            printerServiceProvider.overrideWithValue(mockPrinterService),
+            printerContextProvider.overrideWith(
+              (ref) => TestPrinterContextNotifier(
+                ref,
+                const PrinterContextState(
+                  contexts: [c5Context],
+                  activeContextId: 'c5_ctx',
+                ),
+              ),
+            ),
+            telemetryProvider.overrideWith((ref) => TestTelemetryNotifier(telemetryState)),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: TemperatureCard(),
+            ),
+          ),
+        ),
+      );
+
+      // Verify Head 1 and Head 2 wording & numbering
+      expect(find.text('Head 1'), findsOneWidget);
+      expect(find.text('Head 2'), findsOneWidget);
+      expect(find.text('T0 Left'), findsNothing);
+      expect(find.text('T1 Right'), findsNothing);
+      expect(find.text('Tool T0'), findsNothing);
+      expect(find.text('Tool T1'), findsNothing);
+
+      // Tap Head 1 -> title should be Set Head 1 Temperature
+      await tester.tap(find.text('Head 1'));
+      await tester.pumpAndSettle();
+      expect(find.text('Set Head 1 Temperature'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      // Tap Head 2 -> title should be Set Head 2 Temperature
+      await tester.tap(find.text('Head 2'));
+      await tester.pumpAndSettle();
+      expect(find.text('Set Head 2 Temperature'), findsOneWidget);
     });
   });
 

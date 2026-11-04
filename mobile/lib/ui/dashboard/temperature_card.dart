@@ -42,6 +42,7 @@ class TemperatureCard extends ConsumerWidget {
         (modelStr.contains('ad5x') && nameStr.contains('c5'));
 
     final capabilities = telemetryState.features?.capabilities;
+    final bool isMultiHead = hasMultipleTools || isCreator5;
     final bool hasChamberHeater = isCreator5 ||
         (capabilities?.hasChamberHeater ??
             (status.chamberTemperature != null && status.chamberTemperature! > 0));
@@ -50,9 +51,10 @@ class TemperatureCard extends ConsumerWidget {
 
     final toolColors = [AppColors.toolheadT0, AppColors.toolheadT1, AppColors.warning, AppColors.info];
     String getToolLabel(int i, int total) {
-      if (total <= 1) return 'Extruder';
-      if (total == 2) return i == 0 ? 'T0 Left' : 'T1 Right';
-      return 'Tool T$i';
+      if (isMultiHead || total > 1) {
+        return 'Head ${i + 1}';
+      }
+      return 'Nozzle';
     }
 
     final tiles = <Widget>[
@@ -121,7 +123,7 @@ class TemperatureCard extends ConsumerWidget {
             onTap: () async {
               final target = await showTempSetpointDialog(
                 context: context,
-                title: 'Set Tool $i Temperature',
+                title: 'Set ${getToolLabel(i, status.toolTemps.length)} Temperature',
                 currentVal: i < status.toolTargetTemps.length ? status.toolTargetTemps[i] : 0.0,
                 maxTemp: 320,
               );
@@ -139,13 +141,13 @@ class TemperatureCard extends ConsumerWidget {
           context: context,
           icon: LucideIcons.flame,
           iconColor: AppColors.toolheadT0,
-          label: 'Extruder',
+          label: isMultiHead ? 'Head 1' : 'Nozzle',
           currentTemp: status.nozzleTemperature,
           targetTemp: status.nozzleTargetTemperature,
           onTap: () async {
             final target = await showTempSetpointDialog(
               context: context,
-              title: 'Set Extruder Temperature',
+              title: isMultiHead ? 'Set Head 1 Temperature' : 'Set Nozzle Temperature',
               currentVal: status.nozzleTargetTemperature,
               maxTemp: 320,
             );
