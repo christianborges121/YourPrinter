@@ -638,6 +638,12 @@ export class WebSocketManager extends EventEmitter {
           : 100,
       // Progress from currentJob if available (100% when completed)
       progress: effectiveProgress,
+      layerProgress:
+        currentJob?.progress.layerPercentage !== undefined
+          ? currentJob.progress.layerPercentage
+          : effectiveTotalLayers && effectiveTotalLayers > 0 && effectiveCurrentLayer
+          ? Math.min(100, Math.round((effectiveCurrentLayer / effectiveTotalLayers) * 100))
+          : undefined,
       currentLayer: effectiveCurrentLayer,
       totalLayers: effectiveTotalLayers,
       jobName: effectiveJobName,

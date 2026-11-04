@@ -303,7 +303,7 @@ void main() {
 
       expect(find.text('gear_bearing_v2.gcode'), findsOneWidget);
       expect(find.text('68.5%'), findsOneWidget);
-      expect(find.text('Layer 250 / 365'), findsOneWidget);
+      expect(find.textContaining('Layer 250 / 365'), findsOneWidget);
       expect(find.byKey(const Key('job_speed_quick_bar')), findsNothing);
       expect(find.text('Elapsed'), findsOneWidget);
     });

@@ -79,7 +79,8 @@ export interface PrinterTemperatures {
  * Job progress information
  */
 export interface JobProgress {
-  percentage: number; // 0-100
+  percentage: number; // 0-100 overall progress
+  layerPercentage?: number; // 0-100 layer progress
   currentLayer: number | null;
   totalLayers: number | null;
   timeRemaining: number | null; // minutes

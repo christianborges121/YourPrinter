@@ -47,6 +47,7 @@ export interface PrinterStatusData {
   toolTemps?: number[];
   toolTargetTemps?: number[];
   progress: number;
+  layerProgress?: number;
   currentLayer?: number;
   totalLayers?: number;
   jobName: string | null;
