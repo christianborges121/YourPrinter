@@ -717,7 +717,7 @@ export const SettingsScreen: React.FC = () => {
         <div className="flex flex-col text-left">
           <span className="text-xs font-bold text-[#F3F4F6]">YourPrinter</span>
           <span className="text-[10px] text-[#94A3B8]">
-            v1.0.40 • YourWay
+            v1.0.41 • YourWay
           </span>
         </div>
       </div>

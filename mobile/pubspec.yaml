@@ -1,7 +1,7 @@
 name: yourprinter
 description: YourPrinter mobile monitoring and control client for Android and iOS.
 publish_to: 'none'
-version: 1.0.40+41
+version: 1.0.41+42
 
 environment:
   sdk: '>=3.2.0 <4.0.0'
