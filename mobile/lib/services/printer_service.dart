@@ -145,6 +145,7 @@ class PrinterService {
   }
 
   Future<bool> resumeJob({String? contextId}) async {
+    dismissWatchdogAlert(contextId: contextId).catchError((_) => false);
     final query = contextId != null ? {'contextId': contextId} : null;
     final res = await apiClient.post(ApiEndpoints.jobResume, queryParameters: query);
     return (res.data as Map<String, dynamic>)['success'] == true;
@@ -441,5 +442,17 @@ class PrinterService {
       data: payload,
     );
     return (res.data as Map<String, dynamic>)['success'] == true;
+  }
+
+  Future<bool> dismissWatchdogAlert({String? contextId}) async {
+    try {
+      final res = await apiClient.post(
+        ApiEndpoints.watchdogDismiss,
+        data: contextId != null ? {'contextId': contextId} : {},
+      );
+      return (res.data as Map<String, dynamic>)['success'] == true;
+    } catch (_) {
+      return false;
+    }
   }
 }

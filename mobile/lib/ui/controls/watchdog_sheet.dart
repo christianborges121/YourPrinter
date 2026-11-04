@@ -149,8 +149,23 @@ class _WatchdogSheetState extends ConsumerState<WatchdogSheet> {
             ),
             const SizedBox(height: 16),
 
-            // Sensitivity Threshold Slider
-            Text('Detection Sensitivity: ${(_threshold * 100).toStringAsFixed(0)}%', style: const TextStyle(fontSize: 13)),
+            // Confidence Threshold Slider
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Confidence Threshold', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    Text('Lower values trigger sooner; higher values reduce false alarms', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                  ],
+                ),
+                Text(
+                  '${(_threshold * 100).toStringAsFixed(0)}%',
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.accentGreen),
+                ),
+              ],
+            ),
             Slider(
               value: _threshold,
               min: 0.05,
@@ -168,6 +183,17 @@ class _WatchdogSheetState extends ConsumerState<WatchdogSheet> {
                   consecutiveRequired: _consecutiveRequired,
                 );
               },
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('High Sensitivity (5%)', style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
+                  Text('Balanced (20%)', style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
+                  Text('Low False Alarms (95%)', style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
+                ],
+              ),
             ),
             const SizedBox(height: 8),
 

@@ -111,4 +111,14 @@ export function registerWatchdogRoutes(router: Router, deps: RouteDependencies):
       return res.status(500).json({ success: false, error: e instanceof Error ? e.message : 'Unknown error' });
     }
   });
+
+  router.post('/watchdog/dismiss', async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const contextId = typeof req.body?.contextId === 'string' ? req.body.contextId : undefined;
+      const result = await watchdog.dismissAlert(contextId);
+      return res.json(result);
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e instanceof Error ? e.message : 'Unknown error' });
+    }
+  });
 }

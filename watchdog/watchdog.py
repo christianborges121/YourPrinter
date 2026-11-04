@@ -997,6 +997,38 @@ class WatchdogAPIHandler(http.server.BaseHTTPRequestHandler):
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps({"success": ok}).encode('utf-8'))
+
+        elif path == "/dismiss":
+            try:
+                content_len = int(self.headers.get('Content-Length', 0))
+                body = json.loads(self.rfile.read(content_len).decode('utf-8')) if content_len > 0 else {}
+            except Exception:
+                body = {}
+
+            target_context = body.get("contextId")
+            with state_lock:
+                if target_context and target_context in printer_trackers:
+                    t = printer_trackers[target_context]
+                    t["auto_pause_triggered"] = False
+                    t["auto_pause_alerted"] = False
+                    t["consecutive_failures"] = 0
+                    t["was_in_failure_state"] = False
+                    if t.get("state") == "alert":
+                        t["state"] = "monitoring"
+                else:
+                    for t in printer_trackers.values():
+                        t["auto_pause_triggered"] = False
+                        t["auto_pause_alerted"] = False
+                        t["consecutive_failures"] = 0
+                        t["was_in_failure_state"] = False
+                        if t.get("state") == "alert":
+                            t["state"] = "monitoring"
+                update_aggregate_state()
+
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": True}).encode('utf-8'))
         else:
             self.send_response(404)
             self.end_headers()
@@ -1135,9 +1167,17 @@ def main():
                 # Normalize current state
                 if not tracker.get("is_connected", True) or not is_active or raw_state in ("idle", "ready", "complete", "completed", "finish", ""):
                     current_state = "idle"
-                elif raw_state in ("paused", "pausing", "pause") or tracker.get("auto_pause_triggered", False):
+                elif raw_state in ("paused", "pausing", "pause"):
+                    current_state = "paused"
+                elif tracker.get("auto_pause_triggered", False) and raw_state not in ("printing", "busy", "working", "heating"):
                     current_state = "paused"
                 else:
+                    if tracker.get("auto_pause_triggered", False):
+                        print(f"[▶️] {printer_name}: Active print ({raw_state}) detected while auto-pause was flagged. Clearing alert state.", flush=True)
+                        tracker["auto_pause_triggered"] = False
+                        tracker["auto_pause_alerted"] = False
+                        tracker["consecutive_failures"] = 0
+                        tracker["was_in_failure_state"] = False
                     current_state = "printing"
                     active_printing_count += 1
 

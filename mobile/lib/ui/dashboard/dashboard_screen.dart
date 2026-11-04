@@ -416,7 +416,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   Widget _buildAutoPauseBanner(BuildContext context, String? contextId) {
     final printerService = ref.read(printerServiceProvider);
-    final watchdog = ref.watch(telemetryProvider).status?.watchdog;
+    final telemetry = ref.watch(telemetryProvider);
+    final watchdog = telemetry.status?.watchdog;
+    final isPrinting = telemetry.status?.isPrinting ?? false;
     final confidenceStr = watchdog != null && watchdog.confidence > 0
         ? ' (${(watchdog.confidence * 100).toStringAsFixed(0)}% risk)'
         : '';
@@ -449,7 +451,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Print Paused by AI Watchdog: Defect detected$confidenceStr',
+                      isPrinting
+                          ? 'AI Watchdog Alert: Defect detected$confidenceStr (Print Active)'
+                          : 'Print Paused by AI Watchdog: Defect detected$confidenceStr',
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
@@ -457,15 +461,24 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    const Text(
-                      'Spaghetti, detached print, or failure detected in chamber.',
-                      style: TextStyle(
+                    Text(
+                      isPrinting
+                          ? 'Spaghetti or failure detected in chamber. Print is currently active.'
+                          : 'Spaghetti, detached print, or failure detected in chamber.',
+                      style: const TextStyle(
                         fontSize: 12,
                         color: AppColors.textSecondary,
                       ),
                     ),
                   ],
                 ),
+              ),
+              IconButton(
+                icon: const Icon(LucideIcons.x, size: 18, color: AppColors.textMuted),
+                tooltip: 'Dismiss Alert',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: () => printerService.dismissWatchdogAlert(contextId: contextId),
               ),
             ],
           ),
@@ -491,23 +504,46 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 icon: const Icon(LucideIcons.eye, size: 14, color: AppColors.accentGreen),
                 label: const Text('Inspect Snapshot', style: TextStyle(fontSize: 12)),
               ),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.accentGreen,
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              if (isPrinting)
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accentGreen,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  ),
+                  onPressed: () => printerService.dismissWatchdogAlert(contextId: contextId),
+                  icon: const Icon(LucideIcons.check, size: 14),
+                  label: const Text('Dismiss Alert', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                )
+              else ...[
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accentGreen,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  ),
+                  onPressed: () async {
+                    final success = await printerService.resumePrint(contextId: contextId);
+                    if (context.mounted && !success) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Failed to resume print')),
+                      );
+                    }
+                  },
+                  icon: const Icon(LucideIcons.play, size: 14),
+                  label: const Text('Resume Print', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                 ),
-                onPressed: () async {
-                  final success = await printerService.resumePrint(contextId: contextId);
-                  if (context.mounted && !success) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Failed to resume print')),
-                    );
-                  }
-                },
-                icon: const Icon(LucideIcons.play, size: 14),
-                label: const Text('Resume', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-              ),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textPrimary,
+                    side: const BorderSide(color: AppColors.border),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  onPressed: () => printerService.dismissWatchdogAlert(contextId: contextId),
+                  icon: const Icon(LucideIcons.x, size: 14),
+                  label: const Text('Dismiss', style: TextStyle(fontSize: 12)),
+                ),
+              ],
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.error,

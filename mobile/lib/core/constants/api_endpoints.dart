@@ -62,6 +62,7 @@ class ApiEndpoints {
   static const String watchdogStatus = '/api/watchdog/status';
   static const String watchdogSnapshots = '/api/watchdog/snapshots';
   static const String watchdogConfig = '/api/watchdog/config';
+  static const String watchdogDismiss = '/api/watchdog/dismiss';
   static const String watchdogSnapshotLatest = '/api/watchdog/snapshot/latest';
   static String watchdogSnapshot(String filename) => '/api/watchdog/snapshot/$filename';
 

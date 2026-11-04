@@ -212,6 +212,35 @@ export class WatchdogService {
     }
   }
 
+  public async dismissAlert(contextId?: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const resp = await fetch(`${this.baseUrl}/dismiss`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contextId }),
+      });
+      if (resp.ok) {
+        for (const [key, entry] of this.statusCache.entries()) {
+          if (!contextId || key === contextId || key === '__default__') {
+            this.statusCache.set(key, {
+              status: {
+                ...entry.status,
+                auto_pause_triggered: false,
+                consecutive_failures: 0,
+                state: entry.status.state === 'alert' ? 'monitoring' : entry.status.state,
+              },
+              timestamp: Date.now(),
+            });
+          }
+        }
+        return { success: true };
+      }
+      return { success: false, error: `HTTP ${resp.status}` };
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : 'Watchdog unreachable' };
+    }
+  }
+
   public async getSnapshotsList(contextId?: string): Promise<WatchdogSnapshotItem[]> {
     try {
       const url = `${this.baseUrl}/snapshots${contextId ? `?contextId=${encodeURIComponent(contextId)}` : ''}`;

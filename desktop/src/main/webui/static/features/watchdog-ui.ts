@@ -355,7 +355,24 @@ export function setupWatchdogUI(): void {
     // Banner Resume Print
     if (target.closest('#btn-banner-resume-print')) {
       e.preventDefault();
+      void apiRequest('/api/watchdog/dismiss', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contextId: getCurrentContextId() }),
+      });
       await sendPrinterCommand('control/resume');
+      hideElement('watchdog-auto-pause-banner');
+      return;
+    }
+
+    // Banner Dismiss Alert
+    if (target.closest('#btn-banner-dismiss-alert')) {
+      e.preventDefault();
+      void apiRequest('/api/watchdog/dismiss', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contextId: getCurrentContextId() }),
+      });
       hideElement('watchdog-auto-pause-banner');
       return;
     }

@@ -148,13 +148,18 @@ export const WatchdogModal: React.FC<WatchdogModalProps> = ({ isOpen, onClose })
           </div>
         </div>
 
-        {/* Sensitivity Slider: 5% - 95% */}
+        {/* Confidence Threshold Slider: 5% - 95% */}
         <div className="flex flex-col gap-2 p-3.5 rounded-xl bg-[#262626]/60 border border-[#2E2E2E]">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-[#F3F4F6] flex items-center gap-1.5">
-              <Sliders size={14} className="text-[#00AE42]" />
-              Detection Sensitivity Threshold
-            </span>
+            <div className="flex flex-col">
+              <span className="text-xs font-semibold text-[#F3F4F6] flex items-center gap-1.5">
+                <Sliders size={14} className="text-[#00AE42]" />
+                Detection Confidence Threshold
+              </span>
+              <span className="text-[11px] text-[#94A3B8]">
+                Lower values trigger sooner; higher values reduce false alarms
+              </span>
+            </div>
             <span className="font-mono text-xs font-bold text-[#00AE42]">
               {Math.round(threshold * 100)}%
             </span>
@@ -170,9 +175,9 @@ export const WatchdogModal: React.FC<WatchdogModalProps> = ({ isOpen, onClose })
             className="w-full h-2 bg-[#1E1E1E] rounded-lg appearance-none cursor-pointer accent-[#00AE42]"
           />
           <div className="flex justify-between text-[10px] text-[#94A3B8]">
-            <span>Low False Alarms (5%)</span>
+            <span>High Sensitivity (5%)</span>
             <span>Balanced (20%)</span>
-            <span>High Sensitivity (95%)</span>
+            <span>Low False Alarms (95%)</span>
           </div>
         </div>
 

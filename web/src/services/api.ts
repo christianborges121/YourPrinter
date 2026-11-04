@@ -337,6 +337,13 @@ class ApiClient {
     });
   }
 
+  async dismissWatchdogAlert(contextId?: string): Promise<{ success: boolean }> {
+    return this.request('/api/watchdog/dismiss', {
+      method: 'POST',
+      body: JSON.stringify({ contextId }),
+    });
+  }
+
   getWatchdogSnapshotUrl(filename?: string): string {
     const baseUrl = getServerUrl();
     if (filename) {

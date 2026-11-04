@@ -57,6 +57,7 @@ interface PrinterContextType {
     check_interval_sec?: number;
     consecutive_required?: number;
   }) => Promise<boolean>;
+  dismissWatchdogAlert: () => Promise<boolean>;
   jogAxis: (axis: string, distance: number) => boolean;
   extrudeFilament: (amountMm: number) => boolean;
   retractFilament: (amountMm: number) => boolean;
@@ -544,8 +545,24 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [activeContextId, refreshStatus]);
 
   const resumePrint = useCallback(async () => {
+    // If watchdog was alerting/auto-paused, also dismiss the watchdog alert
+    api.dismissWatchdogAlert(activeContextId || undefined).catch(() => {});
     const res = await api.resumeJob(activeContextId || undefined);
-    if (res.success) await refreshStatus();
+    if (res.success) {
+      setStatus((prev) => {
+        if (!prev || !prev.watchdog) return prev;
+        return {
+          ...prev,
+          watchdog: {
+            ...prev.watchdog,
+            auto_pause_triggered: false,
+            consecutive_failures: 0,
+            state: prev.watchdog.state === 'alert' ? 'monitoring' : prev.watchdog.state,
+          },
+        };
+      });
+      await refreshStatus();
+    }
     return res.success;
   }, [activeContextId, refreshStatus]);
 
@@ -684,6 +701,24 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
     [activeContextId, refreshStatus]
   );
 
+  const dismissWatchdogAlert = useCallback(async () => {
+    const res = await api.dismissWatchdogAlert(activeContextId || undefined);
+    setStatus((prev) => {
+      if (!prev || !prev.watchdog) return prev;
+      return {
+        ...prev,
+        watchdog: {
+          ...prev.watchdog,
+          auto_pause_triggered: false,
+          consecutive_failures: 0,
+          state: prev.watchdog.state === 'alert' ? 'monitoring' : prev.watchdog.state,
+        },
+      };
+    });
+    await refreshStatus();
+    return res.success;
+  }, [activeContextId, refreshStatus]);
+
   const jogAxis = useCallback((axis: string, distance: number) => {
     // Relative motion G-code: G91; G1 <axis><distance> F3000; G90
     const gcode = `G91\nG1 ${axis}${distance} F3000\nG90`;
@@ -767,6 +802,7 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
         loadSlot,
         unloadMaterial,
         updateWatchdog,
+        dismissWatchdogAlert,
         jogAxis,
         extrudeFilament,
         retractFilament,
