@@ -607,18 +607,14 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
         (raw.chamberTargetTemperature as number) ??
         0;
 
-      const isCompleted = (status || '').toLowerCase() === 'completed';
-      let progressVal = isCompleted
-        ? 100
-        : (machineInfo?.PrintProgress ??
-          (raw.printProgress as number) ??
-          (raw.progress as number) ??
-          0);
-
-      // Convert decimal format (0.0 - 1.0) from modern Flashforge backends to percentage (0 - 100)
-      if (progressVal > 0 && progressVal <= 1.0) {
-        progressVal = progressVal * 100;
-      }
+      const statusStr = (status || '').toLowerCase();
+      const isCompleted = statusStr === 'completed';
+      const isPrintingOrPaused = statusStr === 'printing' || statusStr === 'paused';
+      const isHeatingOrWarmup =
+        statusStr === 'heating' ||
+        statusStr === 'busy' ||
+        statusStr === 'preparing' ||
+        statusStr === 'calibrating';
 
       let currentLayerVal =
         machineInfo?.CurrentPrintLayer ??
@@ -633,16 +629,51 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
         (raw.totalPrintLayers as number) ??
         undefined;
 
-      // Guard against stale 100% progress carried over from previous completed job
-      if (
-        !isCompleted &&
-        progressVal >= 90 &&
-        totalLayersVal !== undefined &&
-        totalLayersVal > 1 &&
-        currentLayerVal !== undefined &&
-        currentLayerVal < totalLayersVal * 0.5
-      ) {
-        progressVal = currentLayerVal > 0 ? Math.round((currentLayerVal / totalLayersVal) * 100) : 0;
+      const layerProgressVal =
+        totalLayersVal !== undefined && totalLayersVal > 0 && currentLayerVal !== undefined && currentLayerVal > 0
+          ? Math.min(100, Math.round((currentLayerVal / totalLayersVal) * 100))
+          : 0;
+
+      let progressVal: number;
+      if (isCompleted) {
+        progressVal = 100;
+      } else if (isHeatingOrWarmup) {
+        progressVal = 0;
+      } else if (elapsedTimeSeconds > 0 && remainingTimeSeconds > 0) {
+        // True time-weighted overall job progress: elapsed / (elapsed + remaining)
+        const totalJobSeconds = elapsedTimeSeconds + remainingTimeSeconds;
+        progressVal = Math.min(99, Math.max(1, Math.round((elapsedTimeSeconds / totalJobSeconds) * 100)));
+      } else {
+        // Fallback when remaining time is not yet estimated by firmware
+        let rawProg =
+          machineInfo?.PrintProgress ??
+          (raw.printProgress as number) ??
+          (raw.progress as number) ??
+          0;
+
+        // Convert decimal format (0.0 - 1.0) from modern Flashforge backends to percentage (0 - 100)
+        if (rawProg > 0 && rawProg <= 1.0) {
+          rawProg = rawProg * 100;
+        }
+
+        // Guard against stale 100% progress carried over from previous completed job
+        if (
+          rawProg >= 90 &&
+          totalLayersVal !== undefined &&
+          totalLayersVal > 1 &&
+          currentLayerVal !== undefined &&
+          currentLayerVal < totalLayersVal * 0.5
+        ) {
+          rawProg = 0;
+        }
+
+        if (rawProg > 0) {
+          progressVal = Math.min(99, Math.round(rawProg));
+        } else if (layerProgressVal > 0) {
+          progressVal = Math.min(99, layerProgressVal);
+        } else {
+          progressVal = 0;
+        }
       }
 
       let printEtaVal =
@@ -651,8 +682,6 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
         (raw.eta as string) ??
         undefined;
 
-      const statusStr = (status || '').toLowerCase();
-      const isPrintingOrPaused = statusStr === 'printing' || statusStr === 'paused';
       let effectiveStatus = status;
 
       // Active job smoothing & hysteresis to eliminate flickering on Creator 5 Pro & dual API printers
@@ -784,6 +813,7 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
         toolTargetTemps: extractedToolTargets,
         nozzleCnt: (raw.nozzleCnt as number) ?? (extractedToolTemps.length || 1),
         progress: progressVal,
+        layerProgress: layerProgressVal,
         currentJob: effectiveJob || undefined,
         estimatedTime: totalEstimatedSeconds > 0 ? Math.round(totalEstimatedSeconds / 60) : undefined,
         remainingTime: remainingTimeSeconds > 0 ? Math.round(remainingTimeSeconds / 60) : undefined,

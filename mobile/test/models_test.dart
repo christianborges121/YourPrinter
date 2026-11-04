@@ -78,6 +78,7 @@ void main() {
         'nozzleTemperature': 220.0,
         'nozzleTargetTemperature': 220.0,
         'progress': 50.0,
+        'layerProgress': 25.0,
         'currentLayer': 100,
         'totalLayers': 200,
         'printSpeed': 140.0,
@@ -91,6 +92,8 @@ void main() {
 
       final status = PrinterStatusData.fromJson(json);
 
+      expect(status.progress, 50.0);
+      expect(status.layerProgress, 25.0);
       expect(status.printSpeed, 140.0);
       expect(status.coolingFanSpeed, 75.0);
       expect(status.chamberFanSpeed, 40.0);

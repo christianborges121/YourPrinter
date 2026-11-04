@@ -290,19 +290,28 @@ export class PrinterDataTransformer {
       rawTotalLayers > 1 &&
       rawCurrentLayer < rawTotalLayers * 0.5
     ) {
-      progressPercentage = rawCurrentLayer > 0
-        ? Math.round((rawCurrentLayer / rawTotalLayers) * 100)
-        : 0;
+      if (printDuration > 0 && remainingTime > 0) {
+        const totalSec = printDuration + remainingTime * 60;
+        progressPercentage = totalSec > 0 ? Math.min(99, Math.round((printDuration / totalSec) * 100)) : 0;
+      } else {
+        progressPercentage = 0;
+      }
     }
+
+    const layerPercentage =
+      totalLayers !== null && totalLayers > 0 && currentLayer !== null && currentLayer > 0
+        ? Math.min(100, Math.round((currentLayer / totalLayers) * 100))
+        : 0;
 
     // Log layer information for debugging
     if (currentLayer !== null || totalLayers !== null) {
-      console.log(`[DataTransformer] Layer progress: ${currentLayer}/${totalLayers}`);
+      console.log(`[DataTransformer] Layer progress: ${currentLayer}/${totalLayers} (${layerPercentage}%)`);
     }
 
     // Create progress object
     const progressData = {
-      percentage: progressPercentage, // Now using smart conversion
+      percentage: progressPercentage, // Overall progress
+      layerPercentage,
       currentLayer,
       totalLayers,
       timeRemaining: remainingTime > 0 ? remainingTime : null, // Already in minutes from backend

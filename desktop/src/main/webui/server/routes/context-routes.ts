@@ -249,6 +249,11 @@ export function registerContextRoutes(router: Router, deps: RouteDependencies): 
               toolTemps,
               toolTargetTemps,
               progress: Math.round(normOverviewProg),
+              layerProgress:
+                rawStatus.currentJob?.progress?.layerPercentage ??
+                (rawStatus.currentJob?.progress?.totalLayers && rawStatus.currentJob?.progress?.currentLayer
+                  ? Math.min(100, Math.round((rawStatus.currentJob.progress.currentLayer / rawStatus.currentJob.progress.totalLayers) * 100))
+                  : null),
               currentLayer: rawStatus.currentJob?.progress?.currentLayer ?? rawAny?.currentLayer ?? null,
               totalLayers: rawStatus.currentJob?.progress?.totalLayers ?? rawAny?.totalLayers ?? null,
               jobName: rawStatus.currentJob?.fileName ?? rawAny?.jobName ?? rawAny?.currentJob ?? null,

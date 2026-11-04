@@ -344,7 +344,9 @@ class _FleetPrinterCardState extends ConsumerState<FleetPrinterCard> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Layer ${p.currentLayer} of ${p.totalLayers}',
+                          (p.totalLayers > 0 && p.currentLayer > 0)
+                              ? 'Layer ${p.currentLayer} of ${p.totalLayers} (${((p.currentLayer / p.totalLayers) * 100).round()}%)'
+                              : 'Layer ${p.currentLayer} of ${p.totalLayers}',
                           style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
                         ),
                         Text(

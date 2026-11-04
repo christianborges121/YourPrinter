@@ -161,7 +161,7 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
   const formattedEta = rawStatus?.formattedEta ?? null;
 
   const layerText = currentLayer !== null
-    ? `Layer ${currentLayer}${totalLayers ? ` / ${totalLayers}` : ''}`
+    ? `Layer ${currentLayer}${totalLayers && totalLayers > 0 ? ` / ${totalLayers} (${Math.min(100, Math.round((currentLayer / totalLayers) * 100))}%)` : ''}`
     : isCompleted
     ? 'Print Finished'
     : isPrinting

@@ -90,6 +90,10 @@ export function mapBambuStateToPrinterStatus(state: Record<string, unknown> | nu
 
     const currentLayer = s.layer_num !== undefined ? safeNumber(s.layer_num, 0) : undefined;
     const totalLayers = s.total_layer_num !== undefined ? safeNumber(s.total_layer_num, 0) : undefined;
+    const layerProgress =
+      totalLayers !== undefined && totalLayers > 0 && currentLayer !== undefined && currentLayer > 0
+        ? Math.min(100, Math.round((currentLayer / totalLayers) * 100))
+        : 0;
 
     // Guard against stale 100% progress carried over from previous completed job
     if (
@@ -100,7 +104,7 @@ export function mapBambuStateToPrinterStatus(state: Record<string, unknown> | nu
       currentLayer !== undefined &&
       currentLayer < totalLayers * 0.5
     ) {
-      progress = currentLayer > 0 ? Math.round((currentLayer / totalLayers) * 100) : 0;
+      progress = 0;
     }
 
     const currentJob = (s.subtask_name as string) || (s.gcode_file as string) || undefined;
@@ -137,6 +141,7 @@ export function mapBambuStateToPrinterStatus(state: Record<string, unknown> | nu
       bedTemperature: bedTemp,
       bedTargetTemperature: bedTarget,
       progress,
+      layerProgress,
       currentJob,
       remainingTime,
       currentLayer: currentLayer !== undefined && currentLayer > 0 ? currentLayer : undefined,

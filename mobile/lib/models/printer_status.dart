@@ -97,6 +97,7 @@ class PrinterStatusData {
   final List<double> toolTemps;
   final List<double> toolTargetTemps;
   final double progress;
+  final double? layerProgress;
   final int currentLayer;
   final int totalLayers;
   final String? jobName;
@@ -129,6 +130,7 @@ class PrinterStatusData {
     this.toolTemps = const [],
     this.toolTargetTemps = const [],
     required this.progress,
+    this.layerProgress,
     required this.currentLayer,
     required this.totalLayers,
     this.jobName,
@@ -175,6 +177,7 @@ class PrinterStatusData {
       toolTemps: (json['toolTemps'] as List<dynamic>?)?.map((e) => (e as num).toDouble()).toList() ?? const [],
       toolTargetTemps: (json['toolTargetTemps'] as List<dynamic>?)?.map((e) => (e as num).toDouble()).toList() ?? const [],
       progress: (json['progress'] as num?)?.toDouble() ?? 0.0,
+      layerProgress: (json['layerProgress'] as num?)?.toDouble(),
       currentLayer: (json['currentLayer'] as num?)?.toInt() ?? 0,
       totalLayers: (json['totalLayers'] as num?)?.toInt() ?? 0,
       jobName: json['jobName'] as String?,
@@ -224,6 +227,7 @@ class PrinterStatusData {
     List<double>? toolTemps,
     List<double>? toolTargetTemps,
     double? progress,
+    double? layerProgress,
     int? currentLayer,
     int? totalLayers,
     String? jobName,
@@ -254,6 +258,7 @@ class PrinterStatusData {
       toolTemps: toolTemps ?? this.toolTemps,
       toolTargetTemps: toolTargetTemps ?? this.toolTargetTemps,
       progress: progress ?? this.progress,
+      layerProgress: layerProgress ?? this.layerProgress,
       currentLayer: currentLayer ?? this.currentLayer,
       totalLayers: totalLayers ?? this.totalLayers,
       jobName: jobName ?? this.jobName,
@@ -287,6 +292,7 @@ class PrinterStatusData {
       'toolTemps': toolTemps,
       'toolTargetTemps': toolTargetTemps,
       'progress': progress,
+      if (layerProgress != null) 'layerProgress': layerProgress,
       'currentLayer': currentLayer,
       'totalLayers': totalLayers,
       if (jobName != null) 'jobName': jobName,

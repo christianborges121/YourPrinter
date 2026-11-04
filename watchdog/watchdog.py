@@ -802,15 +802,18 @@ def get_flashforge_state(ip, serial_number, check_code, port=8898):
         progress_pct = round(raw_prog * 100, 1) if raw_prog <= 1.0 else round(raw_prog, 1)
         cur_layer = detail.get('printLayer', 0)
         tgt_layer = detail.get('targetPrintLayer', 0)
+        duration_sec = detail.get("printDuration") or detail.get("PrintDuration") or 0
+        est_sec = detail.get("estimatedTime") or detail.get("EstimatedTime") or 0
 
+        # Primary: True time-weighted overall print progress
+        if duration_sec > 0 and est_sec > 0:
+            total_sec = duration_sec + est_sec
+            progress_pct = round((duration_sec / total_sec) * 100, 1)
+        elif raw_status in ("heating", "busy", "preparing", "calibrating"):
+            progress_pct = 0.0
         # Guard against stale 100% / 1.0 progress from previous print during job start or warmup
-        if progress_pct >= 90 and (cur_layer < max(1, tgt_layer * 0.5) or raw_status in ("heating", "busy", "preparing", "calibrating")):
-            if tgt_layer > 0 and cur_layer > 0:
-                progress_pct = round((cur_layer / tgt_layer) * 100, 1)
-            else:
-                progress_pct = 0.0
-        elif progress_pct == 0 and tgt_layer > 0 and cur_layer > 0:
-            progress_pct = round((cur_layer / tgt_layer) * 100, 1)
+        elif progress_pct >= 90 and (cur_layer < max(1, tgt_layer * 0.5)):
+            progress_pct = 0.0
 
         job_info = {
             "status": raw_status,
@@ -1102,10 +1105,7 @@ def main():
                         (duration_sec < 120 and (tgt_layer_val is None or tgt_layer_val > 10)) or
                         (tgt_layer_val and cur_layer_val is not None and tgt_layer_val > 1 and cur_layer_val < tgt_layer_val * 0.5)
                     ):
-                        if tgt_layer_val and cur_layer_val is not None and tgt_layer_val > 0 and cur_layer_val > 0:
-                            progress_pct = round((cur_layer_val / tgt_layer_val) * 100, 1)
-                        else:
-                            progress_pct = 0.0
+                        progress_pct = 0.0
                 else:
                     # Fallback to direct printer check if available
                     if tracker.get("ip") and tracker.get("client_type") == "flashforge":
@@ -1281,7 +1281,7 @@ def main():
                                 if SEND_PRINT_PROGRESS_ALERT:
                                     send_discord_alert(
                                         title=f"📊 {m_val}% Reached: {clean_name}",
-                                        description=f"• **Printer:** `{printer_name}`\n• **Progress:** `{progress_pct}%` (Layer {layer_str})\n• **Elapsed:** `{duration_min}m`",
+                                        description=f"• **Printer:** `{printer_name}`\n• **Overall Progress:** `{progress_pct}%` (Layer {layer_str})\n• **Elapsed:** `{duration_min}m`",
                                         color=m_color,
                                         image_bytes=jpg,
                                         printer_name=printer_name

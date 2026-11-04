@@ -193,7 +193,9 @@ class JobProgressCard extends ConsumerWidget {
                   ],
                 ),
                 Text(
-                  'Layer ${status.currentLayer} / ${status.totalLayers}',
+                  (status.totalLayers > 0 && status.currentLayer > 0)
+                      ? 'Layer ${status.currentLayer} / ${status.totalLayers} (${((status.currentLayer / status.totalLayers) * 100).round()}%)'
+                      : 'Layer ${status.currentLayer} / ${status.totalLayers}',
                   style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
                 ),
               ],

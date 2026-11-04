@@ -115,6 +115,7 @@ export interface PrinterStatusData {
   fanSpeed?: number;
   printSpeed?: number;
   progress: number;
+  layerProgress?: number;
   currentLayer?: number;
   totalLayers?: number;
   jobName: string | null;

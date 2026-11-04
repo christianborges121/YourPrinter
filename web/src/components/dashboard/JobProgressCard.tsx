@@ -178,6 +178,11 @@ export const JobProgressCard: React.FC = () => {
             <Layers size={12} className="text-[#00AE42]" />
             <span>
               Layer <strong className="text-[#F3F4F6]">{status.currentLayer ?? 0}</strong> / {status.totalLayers ?? '--'}
+              {status.totalLayers && status.totalLayers > 0 && status.currentLayer ? (
+                <span className="text-[#94A3B8] ml-1">
+                  ({Math.min(100, Math.round(((status.currentLayer) / status.totalLayers) * 100))}%)
+                </span>
+              ) : null}
             </span>
           </div>
 
