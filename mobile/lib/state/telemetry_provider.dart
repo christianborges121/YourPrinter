@@ -2,7 +2,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/material_station.dart';
 import '../models/printer_features.dart';
 import '../models/printer_status.dart';
+import '../services/notification_service.dart';
 import 'auth_provider.dart';
+import 'printer_context_provider.dart';
 
 class TelemetryState {
   final bool isLoading;
@@ -50,6 +52,8 @@ class TelemetryNotifier extends StateNotifier<TelemetryState> {
     // Register live WebSocket telemetry listener
     wsClient.addStatusListener((newStatus) {
       state = state.copyWith(isLoading: false, status: newStatus);
+      final printerName = _ref.read(printerContextProvider).activeContext?.name;
+      _ref.read(notificationServiceProvider).processTelemetryUpdate(newStatus, printerName: printerName);
     });
 
     // Register live Spoolman listener
@@ -76,6 +80,8 @@ class TelemetryNotifier extends StateNotifier<TelemetryState> {
         features: features,
         materialStation: station,
       );
+      final printerName = _ref.read(printerContextProvider).activeContext?.name;
+      _ref.read(notificationServiceProvider).processTelemetryUpdate(status, printerName: printerName);
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
     }
@@ -83,6 +89,8 @@ class TelemetryNotifier extends StateNotifier<TelemetryState> {
 
   void updateStatus(PrinterStatusData newStatus) {
     state = state.copyWith(isLoading: false, status: newStatus);
+    final printerName = _ref.read(printerContextProvider).activeContext?.name;
+    _ref.read(notificationServiceProvider).processTelemetryUpdate(newStatus, printerName: printerName);
   }
 }
 

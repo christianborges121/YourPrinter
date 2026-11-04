@@ -9,6 +9,11 @@ class PreferencesService {
   static const String _keyOverride30s = 'yp_camera_override_30s';
   static const String _keyLastContextId = 'yp_last_context_id';
   static const String _keyPrintHistory = 'yourprinter_print_history';
+  static const String _keyNotificationsEnabled = 'yp_notifications_enabled';
+  static const String _keyWatchdogAlertsEnabled = 'yp_watchdog_alerts_enabled';
+  static const String _keyPrintCompleteAlertsEnabled = 'yp_print_complete_alerts_enabled';
+  static const String _keyPrinterCooledAlertsEnabled = 'yp_printer_cooled_alerts_enabled';
+  static const String _keyBackgroundMonitoringEnabled = 'yp_background_monitoring_enabled';
 
   static const String _legacyKeyServerUrl = 'ff_server_url';
   static const String _legacyKeyAuthToken = 'ff_auth_token';
@@ -62,6 +67,46 @@ class PreferencesService {
 
   Future<bool> setLastContextId(String contextId) {
     return _prefs.setString(_keyLastContextId, contextId);
+  }
+
+  bool isNotificationsEnabled() {
+    return _prefs.getBool(_keyNotificationsEnabled) ?? true;
+  }
+
+  Future<bool> setNotificationsEnabled(bool enabled) {
+    return _prefs.setBool(_keyNotificationsEnabled, enabled);
+  }
+
+  bool isWatchdogAlertsEnabled() {
+    return _prefs.getBool(_keyWatchdogAlertsEnabled) ?? true;
+  }
+
+  Future<bool> setWatchdogAlertsEnabled(bool enabled) {
+    return _prefs.setBool(_keyWatchdogAlertsEnabled, enabled);
+  }
+
+  bool isPrintCompleteAlertsEnabled() {
+    return _prefs.getBool(_keyPrintCompleteAlertsEnabled) ?? true;
+  }
+
+  Future<bool> setPrintCompleteAlertsEnabled(bool enabled) {
+    return _prefs.setBool(_keyPrintCompleteAlertsEnabled, enabled);
+  }
+
+  bool isPrinterCooledAlertsEnabled() {
+    return _prefs.getBool(_keyPrinterCooledAlertsEnabled) ?? true;
+  }
+
+  Future<bool> setPrinterCooledAlertsEnabled(bool enabled) {
+    return _prefs.setBool(_keyPrinterCooledAlertsEnabled, enabled);
+  }
+
+  bool isBackgroundMonitoringEnabled() {
+    return _prefs.getBool(_keyBackgroundMonitoringEnabled) ?? true;
+  }
+
+  Future<bool> setBackgroundMonitoringEnabled(bool enabled) {
+    return _prefs.setBool(_keyBackgroundMonitoringEnabled, enabled);
   }
 
   List<PrintHistoryItem> getPrintHistory() {
