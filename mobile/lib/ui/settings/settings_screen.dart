@@ -19,12 +19,23 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late TextEditingController _urlController;
   String? _saveError;
+  bool? _systemNotificationsEnabled;
 
   @override
   void initState() {
     super.initState();
     final prefs = ref.read(preferencesServiceProvider);
     _urlController = TextEditingController(text: prefs.getServerUrl());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkSystemNotificationStatus();
+    });
+  }
+
+  Future<void> _checkSystemNotificationStatus() async {
+    final enabled = await ref.read(notificationServiceProvider).areNotificationsEnabled();
+    if (mounted) {
+      setState(() => _systemNotificationsEnabled = enabled);
+    }
   }
 
   @override
@@ -175,6 +186,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       await prefs.setNotificationsEnabled(val);
                       if (val) {
                         await ref.read(notificationServiceProvider).requestPermissions();
+                        await _checkSystemNotificationStatus();
                       } else {
                         await ref.read(notificationServiceProvider).stopForegroundService();
                       }
@@ -182,6 +194,46 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     },
                   ),
                   if (prefs.isNotificationsEnabled()) ...[
+                    if (_systemNotificationsEnabled == false) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.errorSubtle,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.error.withValues(alpha: 0.4)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(LucideIcons.alertTriangle, size: 18, color: AppColors.error),
+                            const SizedBox(width: 10),
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Notifications blocked by Android OS',
+                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                                  ),
+                                  SizedBox(height: 2),
+                                  Text(
+                                    'Tap to allow notifications in system settings.',
+                                    style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () async {
+                                await ref.read(notificationServiceProvider).openAppNotificationSettings();
+                                await _checkSystemNotificationStatus();
+                              },
+                              child: const Text('Allow', style: TextStyle(color: AppColors.accentGreen, fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const Divider(height: 16),
                     SwitchListTile(
                       title: const Text('AI Watchdog Alerts', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
@@ -246,6 +298,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     OutlinedButton.icon(
                       onPressed: () async {
                         await ref.read(notificationServiceProvider).sendTestNotification();
+                        await _checkSystemNotificationStatus();
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(

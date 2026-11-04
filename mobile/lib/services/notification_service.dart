@@ -135,8 +135,40 @@ class NotificationService {
 
       _initialized = true;
       debugPrint('[NotificationService] Successfully initialized');
+
+      // Request runtime notification permission on Android 13+ if notifications are enabled
+      if (_prefs.isNotificationsEnabled()) {
+        await requestPermissions();
+      }
     } catch (e) {
       debugPrint('[NotificationService] Initialization error: $e');
+    }
+  }
+
+  Future<bool> areNotificationsEnabled() async {
+    try {
+      final androidPlugin = _localNotifications
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      if (androidPlugin != null) {
+        final enabled = await androidPlugin.areNotificationsEnabled();
+        return enabled ?? false;
+      }
+      return true;
+    } catch (e) {
+      debugPrint('[NotificationService] areNotificationsEnabled error: $e');
+      return true;
+    }
+  }
+
+  Future<void> openAppNotificationSettings() async {
+    try {
+      final androidPlugin = _localNotifications
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      if (androidPlugin != null) {
+        await androidPlugin.openAppNotificationSettings();
+      }
+    } catch (e) {
+      debugPrint('[NotificationService] openAppNotificationSettings error: $e');
     }
   }
 
