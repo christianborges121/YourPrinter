@@ -43,6 +43,7 @@ export const CameraHudModal: React.FC<CameraHudModalProps> = ({ isOpen, onClose 
     return () => {
       if (pollInterval) clearInterval(pollInterval);
       window.removeEventListener('keydown', handleKeyDown);
+      setStreamUrl('');
     };
   }, [isOpen, activeContext?.contextId, onClose]);
 

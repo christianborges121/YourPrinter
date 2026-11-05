@@ -235,6 +235,15 @@ export class WebUIManager extends EventEmitter {
       proxyReq.on('error', (err) => {
         res.status(502).json({ error: 'go2rtc proxy error', message: err.message });
       });
+
+      // Tear down proxy request immediately when client navigates away or disconnects
+      res.on('close', () => {
+        proxyReq.destroy();
+      });
+      req.on('close', () => {
+        proxyReq.destroy();
+      });
+
       req.pipe(proxyReq);
     });
 
@@ -562,6 +571,20 @@ export class WebUIManager extends EventEmitter {
         });
         clientSocket.on('error', () => {
           targetSocket.destroy();
+        });
+
+        // Ensure both ends are cleaned up promptly when connection closes or ends
+        clientSocket.on('close', () => {
+          targetSocket.destroy();
+        });
+        targetSocket.on('close', () => {
+          clientSocket.destroy();
+        });
+        clientSocket.on('end', () => {
+          targetSocket.destroy();
+        });
+        targetSocket.on('end', () => {
+          clientSocket.destroy();
         });
       }
     });

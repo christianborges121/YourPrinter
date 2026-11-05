@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../state/camera_provider.dart';
 import '../../state/connection_provider.dart';
 import '../common/not_configured_view.dart';
 import '../dashboard/dashboard_screen.dart';
@@ -18,13 +19,23 @@ class AppScaffold extends ConsumerStatefulWidget {
 class _AppScaffoldState extends ConsumerState<AppScaffold> {
   int _currentIndex = 1; // Default to Device Dashboard (index 1)
 
+  void _onTabChanged(int index) {
+    if (index != _currentIndex) {
+      if (_currentIndex == 1 && index != 1) {
+        // Automatically pause camera stream when clicking/navigating off the Device tab
+        ref.read(cameraStreamServiceProvider).pauseStream();
+      }
+      setState(() => _currentIndex = index);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final connState = ref.watch(connectionProvider);
     final isUnreachable = connState.status == ServerConnectionStatus.unreachable;
 
     final screens = [
-      FleetScreen(onTabSelected: (index) => setState(() => _currentIndex = index)),
+      FleetScreen(onTabSelected: _onTabChanged),
       const DashboardScreen(),
       const FilesScreen(),
       const SettingsScreen(),
@@ -38,7 +49,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> {
           centerTitle: true,
         ),
         body: NotConfiguredView(
-          onOpenSettings: () => setState(() => _currentIndex = 3),
+          onOpenSettings: () => _onTabChanged(3),
         ),
       );
     } else {
@@ -52,7 +63,7 @@ class _AppScaffoldState extends ConsumerState<AppScaffold> {
       body: body,
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
+        onTap: _onTabChanged,
         items: const [
           BottomNavigationBarItem(
             icon: Icon(LucideIcons.layoutGrid, size: 20),

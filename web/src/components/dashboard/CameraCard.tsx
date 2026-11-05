@@ -88,14 +88,38 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
   // Teardown connections
   const stopStream = () => {
     if (signalingWsRef.current) {
-      signalingWsRef.current.close();
+      try {
+        signalingWsRef.current.close(1000, 'Stream stopped');
+      } catch {
+        // ignore
+      }
       signalingWsRef.current = null;
     }
     if (peerConnectionRef.current) {
-      peerConnectionRef.current.close();
+      try {
+        peerConnectionRef.current.getSenders().forEach((s) => {
+          try { s.track?.stop(); } catch {}
+        });
+        peerConnectionRef.current.getReceivers().forEach((r) => {
+          try { r.track?.stop(); } catch {}
+        });
+        peerConnectionRef.current.close();
+      } catch {
+        // ignore
+      }
       peerConnectionRef.current = null;
     }
     if (videoRef.current) {
+      if (videoRef.current.srcObject) {
+        try {
+          const stream = videoRef.current.srcObject as MediaStream;
+          stream.getTracks().forEach((track) => {
+            try { track.stop(); } catch {}
+          });
+        } catch {
+          // ignore
+        }
+      }
       videoRef.current.srcObject = null;
     }
     if (countdownTimerRef.current) {
@@ -122,7 +146,7 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
   };
 
   // Connect WebRTC, MJPEG stream, or fallback to Snapshot
-  const startStream = async () => {
+  const startStream = async (isCancelledCheck?: () => boolean) => {
     stopStream();
     setIsLoading(true);
     setErrorMsg(null);
@@ -130,6 +154,7 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
 
     try {
       const config = await api.getCameraProxyConfig(activeContextId || undefined);
+      if (isCancelledCheck?.()) return;
 
       if (!config.success) {
         startSnapshotPolling();
@@ -159,6 +184,7 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
         peerConnectionRef.current = pc;
 
         pc.ontrack = (event) => {
+          if (isCancelledCheck?.()) return;
           if (videoRef.current && event.streams[0]) {
             videoRef.current.srcObject = event.streams[0];
             setStreamMode('webrtc');
@@ -175,12 +201,21 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
         signalingWsRef.current = ws;
 
         ws.onopen = async () => {
+          if (isCancelledCheck?.()) {
+            try { ws.close(); } catch {}
+            return;
+          }
           const offer = await pc.createOffer({ offerToReceiveVideo: true, offerToReceiveAudio: false });
+          if (isCancelledCheck?.()) {
+            try { ws.close(); } catch {}
+            return;
+          }
           await pc.setLocalDescription(offer);
           ws.send(JSON.stringify({ type: 'webrtc/offer', value: offer.sdp }));
         };
 
         ws.onmessage = async (evt) => {
+          if (isCancelledCheck?.()) return;
           try {
             const data = JSON.parse(evt.data);
             if (data.type === 'error') {
@@ -206,6 +241,7 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
         };
 
         ws.onerror = () => {
+          if (isCancelledCheck?.()) return;
           if (config.streamName) {
             setMjpegUrl(api.getStreamMjpegUrl(config.streamName));
             setStreamMode('mjpeg');
@@ -217,6 +253,7 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
 
         // Timeout fallback to MJPEG or snapshot if WebRTC takes > 3s
         setTimeout(() => {
+          if (isCancelledCheck?.()) return;
           if (pc.iceConnectionState !== 'connected' && pc.iceConnectionState !== 'completed') {
             if (config.streamName) {
               setMjpegUrl(api.getStreamMjpegUrl(config.streamName));
@@ -228,6 +265,7 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
           }
         }, 3000);
       } catch {
+        if (isCancelledCheck?.()) return;
         if (config.streamName) {
           setMjpegUrl(api.getStreamMjpegUrl(config.streamName));
           setStreamMode('mjpeg');
@@ -237,17 +275,21 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
         }
       }
     } catch {
-      startSnapshotPolling();
+      if (!isCancelledCheck?.()) {
+        startSnapshotPolling();
+      }
     }
   };
 
   useEffect(() => {
+    let isCancelled = false;
     if (isPlaying) {
-      startStream();
+      void startStream(() => isCancelled);
     } else {
       stopStream();
     }
     return () => {
+      isCancelled = true;
       stopStream();
     };
   }, [isPlaying, activeContextId]);

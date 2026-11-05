@@ -8,6 +8,7 @@ import {
   Play,
   Pause,
   ChevronRight,
+  RefreshCw,
 } from 'lucide-react';
 import type { FleetOverviewPrinter } from '../../types';
 import { StatusBadge } from '../common/StatusBadge';
@@ -31,10 +32,15 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
   layoutMode = 'medium',
 }) => {
   const [isStreaming, setIsStreaming] = useState(false);
+  const [streamMode, setStreamMode] = useState<'webrtc' | 'mjpeg' | 'snapshot'>('webrtc');
+  const [mjpegUrl, setMjpegUrl] = useState<string>('');
+  const [snapshotUrl, setSnapshotUrl] = useState<string>('');
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const signalingWsRef = useRef<WebSocket | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const snapshotPollTimerRef = useRef<number | null>(null);
 
   // Sync with global commands (Timed Preview, Stream All, Pause All)
   useEffect(() => {
@@ -43,72 +49,202 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
     }
   }, [overrideStreaming]);
 
-  // WebRTC live video streaming lifecycle
+  // Clean teardown helper
+  const teardownConnections = () => {
+    if (signalingWsRef.current) {
+      try {
+        signalingWsRef.current.close(1000, 'Card stream stopped');
+      } catch {
+        // ignore
+      }
+      signalingWsRef.current = null;
+    }
+    if (peerConnectionRef.current) {
+      try {
+        peerConnectionRef.current.getSenders().forEach((s) => {
+          try { s.track?.stop(); } catch {}
+        });
+        peerConnectionRef.current.getReceivers().forEach((r) => {
+          try { r.track?.stop(); } catch {}
+        });
+        peerConnectionRef.current.close();
+      } catch {
+        // ignore
+      }
+      peerConnectionRef.current = null;
+    }
+    if (videoRef.current) {
+      if (videoRef.current.srcObject) {
+        try {
+          const stream = videoRef.current.srcObject as MediaStream;
+          stream.getTracks().forEach((track) => {
+            try { track.stop(); } catch {}
+          });
+        } catch {
+          // ignore
+        }
+      }
+      videoRef.current.srcObject = null;
+    }
+    if (snapshotPollTimerRef.current) {
+      clearInterval(snapshotPollTimerRef.current);
+      snapshotPollTimerRef.current = null;
+    }
+    setMjpegUrl('');
+    setIsLoading(false);
+  };
+
+  // Robust live video streaming lifecycle with WebRTC, MJPEG, and snapshot fallbacks
   useEffect(() => {
     if (!camerasVisible || !isStreaming || !printer.contextId || !printer.isConnected || !printer.hasCamera) {
-      if (peerConnectionRef.current) {
-        peerConnectionRef.current.close();
-        peerConnectionRef.current = null;
-      }
-      if (signalingWsRef.current) {
-        signalingWsRef.current.close();
-        signalingWsRef.current = null;
-      }
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
+      teardownConnections();
       return;
     }
 
     let isCancelled = false;
 
+    const startSnapshotFallback = () => {
+      if (isCancelled) return;
+      setStreamMode('snapshot');
+      setIsLoading(false);
+      setSnapshotUrl(api.getSnapshotUrl(printer.contextId || undefined, Date.now()));
+
+      if (snapshotPollTimerRef.current) clearInterval(snapshotPollTimerRef.current);
+      snapshotPollTimerRef.current = window.setInterval(() => {
+        if (!isCancelled) {
+          setSnapshotUrl(api.getSnapshotUrl(printer.contextId || undefined, Date.now()));
+        }
+      }, 1500);
+    };
+
     const startCardStream = async () => {
+      teardownConnections();
+      setIsLoading(true);
+
       try {
         const config = await api.getCameraProxyConfig(printer.contextId || undefined);
-        if (isCancelled || !config.success || !config.wsUrl) return;
+        if (isCancelled) return;
 
-        const pc = new RTCPeerConnection({
-          iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-        });
-        peerConnectionRef.current = pc;
+        if (!config.success) {
+          startSnapshotFallback();
+          return;
+        }
 
-        pc.ontrack = (event) => {
-          if (videoRef.current && event.streams[0]) {
-            videoRef.current.srcObject = event.streams[0];
-          }
-        };
+        // 1. Direct MJPEG mode (e.g. Creator 5 Pro, Bambu Bridge, Adventurer 5M MJPEG)
+        if (config.mode === 'mjpeg' || config.streamType === 'mjpeg') {
+          const streamName = config.streamName || `printer_${printer.contextId || ''}`;
+          setMjpegUrl(api.getStreamMjpegUrl(streamName));
+          setStreamMode('mjpeg');
+          setIsLoading(false);
+          return;
+        }
 
-        const wsUrl = config.wsUrl.startsWith('ws')
-          ? config.wsUrl
-          : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}${config.wsUrl}`;
+        if (!config.wsUrl) {
+          startSnapshotFallback();
+          return;
+        }
 
-        const ws = new WebSocket(wsUrl);
-        signalingWsRef.current = ws;
+        // 2. WebRTC streaming with Go2rtc
+        try {
+          const pc = new RTCPeerConnection({
+            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+          });
+          peerConnectionRef.current = pc;
 
-        ws.onopen = async () => {
-          const offer = await pc.createOffer({ offerToReceiveVideo: true, offerToReceiveAudio: false });
-          await pc.setLocalDescription(offer);
-          ws.send(JSON.stringify({ type: 'webrtc/offer', value: offer.sdp }));
-        };
-
-        ws.onmessage = async (evt) => {
-          try {
-            const data = JSON.parse(evt.data);
-            if (data.type === 'webrtc/answer' && pc.signalingState !== 'closed') {
-              await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: data.value }));
-            } else if (data.type === 'webrtc/candidate' && pc.signalingState !== 'closed') {
-              await pc.addIceCandidate(new RTCIceCandidate({ candidate: data.value, sdpMid: '0', sdpMLineIndex: 0 }));
+          pc.ontrack = (event) => {
+            if (isCancelled) return;
+            if (videoRef.current && event.streams[0]) {
+              videoRef.current.srcObject = event.streams[0];
+              setStreamMode('webrtc');
+              setIsLoading(false);
             }
-          } catch {
-            // non-json frame
-          }
-        };
+          };
 
-        ws.onerror = () => {
-          setIsStreaming(false);
-        };
+          const wsUrl = config.wsUrl.startsWith('ws')
+            ? config.wsUrl
+            : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}${config.wsUrl}`;
+
+          const ws = new WebSocket(wsUrl);
+          signalingWsRef.current = ws;
+
+          ws.onopen = async () => {
+            if (isCancelled) {
+              try { ws.close(); } catch {}
+              return;
+            }
+            const offer = await pc.createOffer({ offerToReceiveVideo: true, offerToReceiveAudio: false });
+            if (isCancelled) {
+              try { ws.close(); } catch {}
+              return;
+            }
+            await pc.setLocalDescription(offer);
+            ws.send(JSON.stringify({ type: 'webrtc/offer', value: offer.sdp }));
+          };
+
+          ws.onmessage = async (evt) => {
+            if (isCancelled) return;
+            try {
+              const data = JSON.parse(evt.data);
+              if (data.type === 'error') {
+                console.warn('[FleetPrinterCard] WebRTC error from go2rtc:', data.value);
+                // Codecs not matched or WebRTC unsupported for stream -> fallback to MJPEG
+                if (config.streamName) {
+                  setMjpegUrl(api.getStreamMjpegUrl(config.streamName));
+                  setStreamMode('mjpeg');
+                  setIsLoading(false);
+                } else {
+                  startSnapshotFallback();
+                }
+                return;
+              }
+              if (data.type === 'webrtc/answer' && pc.signalingState !== 'closed') {
+                await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: data.value }));
+              } else if (data.type === 'webrtc/candidate' && pc.signalingState !== 'closed') {
+                await pc.addIceCandidate(new RTCIceCandidate({ candidate: data.value, sdpMid: '0', sdpMLineIndex: 0 }));
+              }
+            } catch {
+              // non-json or binary frame
+            }
+          };
+
+          ws.onerror = () => {
+            if (isCancelled) return;
+            if (config.streamName) {
+              setMjpegUrl(api.getStreamMjpegUrl(config.streamName));
+              setStreamMode('mjpeg');
+              setIsLoading(false);
+            } else {
+              startSnapshotFallback();
+            }
+          };
+
+          // Timeout fallback to MJPEG or snapshot if WebRTC takes > 3.5s
+          setTimeout(() => {
+            if (isCancelled) return;
+            if (pc.iceConnectionState !== 'connected' && pc.iceConnectionState !== 'completed') {
+              if (config.streamName) {
+                setMjpegUrl(api.getStreamMjpegUrl(config.streamName));
+                setStreamMode('mjpeg');
+                setIsLoading(false);
+              } else {
+                startSnapshotFallback();
+              }
+            }
+          }, 3500);
+        } catch {
+          if (isCancelled) return;
+          if (config.streamName) {
+            setMjpegUrl(api.getStreamMjpegUrl(config.streamName));
+            setStreamMode('mjpeg');
+            setIsLoading(false);
+          } else {
+            startSnapshotFallback();
+          }
+        }
       } catch {
-        setIsStreaming(false);
+        if (!isCancelled) {
+          startSnapshotFallback();
+        }
       }
     };
 
@@ -116,17 +252,7 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
 
     return () => {
       isCancelled = true;
-      if (peerConnectionRef.current) {
-        peerConnectionRef.current.close();
-        peerConnectionRef.current = null;
-      }
-      if (signalingWsRef.current) {
-        signalingWsRef.current.close();
-        signalingWsRef.current = null;
-      }
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
+      teardownConnections();
     };
   }, [camerasVisible, isStreaming, printer.contextId, printer.isConnected, printer.hasCamera]);
 
@@ -179,18 +305,60 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
       {printer.isConnected && printer.hasCamera ? (
         isStreaming ? (
           <>
+            {/* 1. WebRTC Video Stream */}
             <video
               ref={videoRef}
               autoPlay
               playsInline
               muted
-              className="w-full h-full object-contain bg-black"
+              className={`w-full h-full object-contain bg-black ${
+                streamMode === 'webrtc' ? 'block' : 'hidden'
+              }`}
             />
-            <div className="absolute top-2 left-2 flex items-center gap-1.5 bg-black/75 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] font-semibold text-white select-none">
-              <span className="w-2 h-2 rounded-full bg-[#00AE42] animate-pulse shadow-[0_0_6px_#00AE42]" />
-              <span>LIVE</span>
-            </div>
-            <div className="absolute top-2 right-2">
+
+            {/* 2. MJPEG Stream Fallback / Mode */}
+            {streamMode === 'mjpeg' && mjpegUrl && (
+              <img
+                src={mjpegUrl}
+                alt="Live Camera Feed"
+                className="w-full h-full object-contain bg-black"
+                onLoad={() => setIsLoading(false)}
+                onError={() => {
+                  console.warn('[FleetPrinterCard] MJPEG stream failed, falling back to snapshot');
+                  setStreamMode('snapshot');
+                  setSnapshotUrl(api.getSnapshotUrl(printer.contextId || undefined, Date.now()));
+                }}
+              />
+            )}
+
+            {/* 3. Snapshot Polling Fallback */}
+            {streamMode === 'snapshot' && snapshotUrl && (
+              <img
+                src={snapshotUrl}
+                alt="Camera Snapshot"
+                className="w-full h-full object-contain bg-black"
+                onLoad={() => setIsLoading(false)}
+              />
+            )}
+
+            {/* Loading Spinner Overlay */}
+            {isLoading && (
+              <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-1.5 z-10 select-none">
+                <RefreshCw size={20} className="text-[#00AE42] animate-spin" />
+                <span className="text-[11px] text-[#94A3B8]">Connecting stream...</span>
+              </div>
+            )}
+
+            {/* LIVE Badge */}
+            {!isLoading && (
+              <div className="absolute top-2 left-2 flex items-center gap-1.5 bg-black/75 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] font-semibold text-white select-none z-10">
+                <span className="w-2 h-2 rounded-full bg-[#00AE42] animate-pulse shadow-[0_0_6px_#00AE42]" />
+                <span>LIVE</span>
+              </div>
+            )}
+
+            {/* Pause Stream Control */}
+            <div className="absolute top-2 right-2 z-10">
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -204,11 +372,22 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
             </div>
           </>
         ) : (
-          <div className="w-full h-full bg-[#161616] flex flex-col items-center justify-center gap-1.5 p-3 select-none">
-            <div className="p-2 rounded-full bg-[#222222] text-[#94A3B8] border border-[#2E2E2E] shadow-sm">
+          <div className="relative w-full h-full bg-[#161616] flex flex-col items-center justify-center gap-1.5 p-3 select-none overflow-hidden">
+            {/* Optional background snapshot image for standby preview */}
+            {printer.contextId && (
+              <img
+                src={api.getSnapshotUrl(printer.contextId)}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover opacity-25 filter blur-[1px] pointer-events-none"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = 'none';
+                }}
+              />
+            )}
+            <div className="relative z-10 p-2 rounded-full bg-[#222222]/90 text-[#94A3B8] border border-[#2E2E2E] shadow-sm">
               <Video size={isSmall ? 15 : 18} />
             </div>
-            <div className="flex flex-col items-center text-center">
+            <div className="relative z-10 flex flex-col items-center text-center">
               <span className="text-xs font-semibold text-[#D1D5DB]">Camera Standby</span>
               {!isSmall && (
                 <span className="text-[10px] text-[#94A3B8]">Tap to start video stream</span>
@@ -219,7 +398,7 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
                 e.stopPropagation();
                 setIsStreaming(true);
               }}
-              className="flex items-center gap-1.5 px-3 py-1 mt-0.5 rounded-lg bg-[#00AE42] hover:bg-[#009638] text-xs font-semibold text-white shadow-sm transition-all cursor-pointer active:scale-95"
+              className="relative z-10 flex items-center gap-1.5 px-3 py-1 mt-0.5 rounded-lg bg-[#00AE42] hover:bg-[#009638] text-xs font-semibold text-white shadow-sm transition-all cursor-pointer active:scale-95"
             >
               <Play size={11} fill="currentColor" />
               <span>Watch Stream</span>
