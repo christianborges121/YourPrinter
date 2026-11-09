@@ -1,108 +1,167 @@
 <div align="center">
 
-<img width="64" height="64" alt="YourPrinter Logo" src="shared/assets/logo/yourprinter-logo-unified.svg" />
+<img width="80" height="80" alt="YourPrinter Logo" src="shared/assets/logo/yourprinter-logo-unified.svg" />
 
 # YourPrinter
 
-**Unified Desktop, Headless Server, WebUI, and Mobile Suite for 3D Printer Fleet Management**
+**A self-hosted management dashboard and mobile app for FlashForge and Bambu Lab 3D printers.**
 
-![Platforms](https://img.shields.io/badge/Platforms-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20Web-00ae42?style=flat)
-![License](https://img.shields.io/badge/License-MIT-blue?style=flat)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Platforms](https://img.shields.io/badge/Platforms-Docker%20%7C%20Linux%20%7C%20Windows%20%7C%20macOS%20%7C%20Android-00ae42.svg)](#supported-printers)
+[![Release](https://img.shields.io/github/v/release/christianborges121/YourPrinter?color=00ae42)](https://github.com/christianborges121/YourPrinter/releases)
+
+<br />
+
+<p align="center">
+  <img src="docs/screenshots/fleet_overview.png" width="45%" alt="YourPrinter Fleet Dashboard" />
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/device_dashboard.png" width="45%" alt="YourPrinter Device Controls" />
+</p>
 
 </div>
 
 ---
 
-## Upstream Attribution & Credits
-
-This repository unifies the desktop/headless server, WebUI client, and mobile application built upon the open-source work of:
-
-- **[Parallel-7/FlashForgeUI-Electron](https://github.com/Parallel-7/FlashForgeUI-Electron)** by **GhostTypes** and contributors — Original desktop & WebUI architecture, multi-printer context engine, go2rtc streaming, Spoolman integration, Calibration Assistant, and `@parallel-7/slicer-meta` / `@ghosttypes/ff-api`.
-- **[rolohaun/FlashForgeUI-Electron-Creator5](https://github.com/rolohaun/FlashForgeUI-Electron-Creator5)** by **rolohaun** — FlashForge Creator 5 compatibility fork (AD5X/IFS multi-extruder flow and modern HTTP API pairing).
-- **YourPrinter Extensions** by **christianborges121** — Unified monorepo (`desktop/`, `web/`, `mobile/`, `shared/`), Bambu Lab A1 mini LAN-mode support (MQTT + FTPS + port 6000 camera + AMS Lite), Creator 5 Pro 4-head independent extruder support, AI/Obico stream watchdog integration, and native Flutter mobile app (`YourPrinter Mobile`).
-
-All original license terms and copyright notices are strictly retained in [`LICENSE`](LICENSE), [`desktop/LICENSE`](desktop/LICENSE), [`web/LICENSE`](web/LICENSE), [`mobile/LICENSE`](mobile/LICENSE), and [`shared/LICENSE`](shared/LICENSE).
+YourPrinter connects directly to your 3D printers over your local network — no cloud accounts, no subscriptions, and no vendor lock-in. Monitor multiple printers simultaneously, stream low-latency camera feeds, manage multi-material systems, and detect print failures using an onboard local AI watchdog.
 
 ---
 
-## Monorepo Architecture
+## Key Features
 
-```text
-YourPrinter/
-├── desktop/    # Electron desktop app, headless Express/WebSocket server, printer backends & vendor packages
-├── web/        # Modern browser WebUI client (React 19, TypeScript, Vite, Tailwind CSS, Lucide Icons, Mobile Parity UI)
-├── mobile/     # Native Flutter mobile app (Android/iOS) with live camera, fleet management & filament slot UI
-├── shared/     # Shared API contracts (web-api.types.ts), printer/polling models, and official brand logos
-├── CHANGELOG.md
-└── LICENSE
-```
+### 🖥️ Multi-Printer Fleet Dashboard
+Monitor your entire print farm from a single screen. Track live progress, remaining print time, layer heights, and temperatures across all connected machines in real time.
+- Direct printer status cards with active job tracking
+- Seamless switching between individual device dashboards
+
+### 📹 Low-Latency Live Camera Streaming
+Powered by an embedded [go2rtc](https://github.com/AlexxIT/go2rtc) streaming gateway.
+- Sub-second WebRTC and MJPEG streams directly from printer cameras
+- Multi-camera fleet view with simultaneous live video
+- Automatic snapshot fallback for slower or intermittent network connections
+
+### 🎨 Multi-Material & Multi-Toolhead Controls
+<p align="center">
+  <img src="docs/screenshots/multi_material.png" width="45%" alt="Multi-Material Management" />
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/motion_controls.png" width="45%" alt="Manual Motion and Fan Controls" />
+</p>
+
+First-class support for multi-color and multi-extruder hardware:
+- **Bambu Lab AMS Lite**: 4-slot filament status, active slot selection, and material tracking.
+- **FlashForge Creator 5 / 5 Pro**: Independent multi-head toolhead monitoring (Heads 1–4) with per-nozzle temperatures and IFS filament slots.
+- **Manual Control**: Interactive motion jog pad, custom extrusion lengths, part cooling fan sliders, and chamber lighting toggles.
+
+### 🧠 On-Prem AI Print Failure Watchdog
+<p align="center">
+  <img src="docs/screenshots/ai_watchdog.png" width="55%" alt="AI Failure Watchdog Alert" />
+</p>
+
+Catch spaghetti and print failures before wasting hours of print time and filament:
+- Integrated Obico (YOLO/Darknet) visual failure detection running 100% locally on your GPU
+- Automatic print pausing when failure confidence exceeds your custom threshold
+- Push notifications and Discord webhook alerts with captured failure frames
+
+### 📱 Native Mobile Companion
+A Flutter-based Android and iOS mobile app with full feature parity:
+- Low-latency camera feeds and fleet monitoring on the go
+- Local notifications when prints finish or failures are detected
+- Direct APK downloads available under [Releases](https://github.com/christianborges121/YourPrinter/releases)
 
 ---
 
 ## Supported Printers
 
-| Printer | Support | Material Station / Extruders | Notes |
-| --- | --- | --- | --- |
-| **FlashForge Creator 5 / Creator 5 Pro** | Full | Yes (4 independent extruders / slots) | AD5X-compatible IFS & Multi-Head flow |
-| **FlashForge AD5X** | Full | Yes (4 slots) | Multi-material 3MF printing |
-| **Bambu Lab A1 mini** | Full | Yes (AMS Lite 4 slots) | LAN-Only + Developer Mode, MQTT + FTPS + Port 6000 camera |
-| **FlashForge Adventurer 5M Pro** | Full | No | Includes filtration control |
-| **FlashForge Adventurer 5M** | Full | No | Modern HTTP + TCP API |
-| **FlashForge Adventurer 3 / 4** | Full | No | Legacy API |
+| Printer | Connection | Multi-Material / Toolheads | Camera |
+| :--- | :--- | :--- | :--- |
+| **FlashForge Creator 5 / 5 Pro** | TCP / HTTP API | 4 Independent Toolheads (IFS) | Native MJPEG |
+| **FlashForge AD5X** | TCP / HTTP API | 4-Slot Multi-Material (IFS) | Native RTSP / WebRTC |
+| **Bambu Lab A1 mini** | LAN Mode (MQTT + FTPS) | AMS Lite (4 Slots) | Port 6000 / WebRTC |
+| **FlashForge Adventurer 5M Pro** | TCP / HTTP API | Single Extruder + Air Filtration | Native RTSP / WebRTC |
+| **FlashForge Adventurer 5M** | TCP / HTTP API | Single Extruder | Native RTSP / WebRTC |
+| **FlashForge Adventurer 3 / 4** | Legacy FlashForge Protocol | Single Extruder | Native MJPEG / Snapshot |
 
 ---
 
 ## Quick Start
 
-### 1. Docker Compose (Unified Server, WebUI & AI Watchdog)
+### Option 1: Docker Compose (Recommended)
 
-The entire suite runs as a unified stack with zero external dependencies:
+The easiest way to run the backend server, WebUI, and AI watchdog:
 
 ```bash
-docker compose up -d --build
-```
+# Clone the repository
+git clone https://github.com/christianborges121/YourPrinter.git
+cd YourPrinter
 
-- **`yourprinter`**: Headless backend server with go2rtc camera proxy & printer backends.
-- **`yourprinter-web`**: Fast React WebUI served via Nginx on port `3080` (`http://localhost:3080`).
-- **`watchdog`**: Obico YOLO Darknet AI failure/spaghetti monitor on GPU port `8085`.
-
-To configure Discord notifications and custom thresholds, copy `watchdog/.env.example` to `.env`:
-```bash
+# Optional: configure Discord webhooks or alert thresholds
 cp watchdog/.env.example .env
+
+# Start the stack
+docker compose up -d
 ```
 
-### 2. Desktop & Headless Server + WebUI (`desktop/` & `web/`)
+Open your browser to `http://localhost:3080` (or your host IP).
 
-```powershell
+| Container | Port | Service |
+| :--- | :--- | :--- |
+| `yourprinter-web` | `3080` | WebUI Dashboard |
+| `yourprinter` | `3000` | Backend API & go2rtc Camera Proxy |
+| `watchdog` | `8085` | GPU AI Failure Detection Engine |
+
+---
+
+### Option 2: Desktop App (Electron)
+
+If you prefer a native desktop application on Windows, Linux, or macOS:
+
+```bash
 cd desktop
 pnpm install
 pnpm build
 pnpm start
 ```
 
-- To build only the WebUI bundle (`web/` -> `desktop/out/webui/static`):
-  ```powershell
-  cd desktop
-  pnpm run build:webui
-  ```
+---
 
-### 3. Mobile App (`mobile/`)
+### Option 3: Android Mobile App
 
-```powershell
+Download the latest pre-compiled APK from the [Releases](https://github.com/christianborges121/YourPrinter/releases) page and point it to your YourPrinter server IP address.
+
+To build from source:
+
+```bash
 cd mobile
 flutter pub get
-flutter test
 flutter build apk --release
 ```
 
-- Every push to `master` automatically increments the mobile app patch version by `0.0.1` (unless `[skip bump]` or `[version: X.Y.Z]` is included in the commit message) and publishes optimized per-architecture APKs (`arm64-v8a`, `armeabi-v7a`, `x86_64`) directly to [GitHub Releases](../../releases).
+---
+
+## Monorepo Structure
+
+```text
+YourPrinter/
+├── desktop/    # Electron app, headless backend server, printer backends & go2rtc gateway
+├── web/        # Browser WebUI dashboard
+├── mobile/     # Flutter mobile companion app (Android & iOS)
+├── watchdog/   # Local GPU AI failure detection engine (Obico / YOLO)
+└── shared/     # Shared protocol types, API schemas, and assets
+```
+
+---
+
+## Upstream Credits & Attribution
+
+YourPrinter builds upon and unifies several open-source community projects:
+
+- **[Parallel-7/FlashForgeUI-Electron](https://github.com/Parallel-7/FlashForgeUI-Electron)** by **GhostTypes** — Original desktop & WebUI architecture, multi-printer context system, go2rtc integration, and FlashForge client protocols.
+- **[rolohaun/FlashForgeUI-Electron-Creator5](https://github.com/rolohaun/FlashForgeUI-Electron-Creator5)** by **rolohaun** — FlashForge Creator 5 multi-extruder compatibility and IFS protocol support.
+- **YourPrinter** by **christianborges121** — Monorepo unification, Bambu Lab LAN-mode integration (MQTT/FTPS/AMS Lite), local GPU AI failure watchdog, and native Flutter mobile application.
+
+All original licenses and copyright notices are preserved in [`LICENSE`](LICENSE).
 
 ---
 
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
-
-- Copyright &copy; 2025–2026 **GhostTypes** ([Parallel-7/FlashForgeUI-Electron](https://github.com/Parallel-7/FlashForgeUI-Electron))
-- Copyright &copy; 2026 **rolohaun** ([rolohaun/FlashForgeUI-Electron-Creator5](https://github.com/rolohaun/FlashForgeUI-Electron-Creator5))
-- Copyright &copy; 2026 **christianborges121**
