@@ -13,9 +13,7 @@
 <br />
 
 <p align="center">
-  <img src="docs/screenshots/fleet_overview.png" width="45%" alt="YourPrinter Fleet Dashboard" />
-  &nbsp;&nbsp;
-  <img src="docs/screenshots/device_dashboard.png" width="45%" alt="YourPrinter Device Controls" />
+  <img src="docs/screenshots/webui_dashboard.png" width="100%" alt="YourPrinter Web Dashboard" />
 </p>
 
 </div>
@@ -28,44 +26,54 @@ YourPrinter connects directly to your 3D printers over your local network — no
 
 ## Key Features
 
-### 🖥️ Multi-Printer Fleet Dashboard
-Monitor your entire print farm from a single screen. Track live progress, remaining print time, layer heights, and temperatures across all connected machines in real time.
-- Direct printer status cards with active job tracking
-- Seamless switching between individual device dashboards
+### 🖥️ Desktop Web Dashboard
+Monitor and control your entire print farm from any modern desktop browser.
+- **Fleet Overview**: Live multi-camera grid, active print progress, remaining time, layer counters, and temperatures across all connected machines.
+- **Device Controls**: Real-time camera streaming, interactive temperature setpoints, part cooling fan sliders, print speed presets, and chamber air filtration modes.
+- **Multi-Material Management**: Direct monitoring of filament slots, active toolhead extruders, material types, and per-head temperatures.
 
-### 📹 Low-Latency Live Camera Streaming
-Powered by an embedded [go2rtc](https://github.com/AlexxIT/go2rtc) streaming gateway.
-- Sub-second WebRTC and MJPEG streams directly from printer cameras
-- Multi-camera fleet view with simultaneous live video
-- Automatic snapshot fallback for slower or intermittent network connections
-
-### 🎨 Multi-Material & Multi-Toolhead Controls
 <p align="center">
-  <img src="docs/screenshots/multi_material.png" width="45%" alt="Multi-Material Management" />
-  &nbsp;&nbsp;
-  <img src="docs/screenshots/motion_controls.png" width="45%" alt="Manual Motion and Fan Controls" />
+  <img src="docs/screenshots/webui_fleet.png" width="100%" alt="YourPrinter Fleet Dashboard" />
 </p>
 
-First-class support for multi-color and multi-extruder hardware:
-- **Bambu Lab AMS Lite**: 4-slot filament status, active slot selection, and material tracking.
-- **FlashForge Creator 5 / 5 Pro**: Independent multi-head toolhead monitoring (Heads 1–4) with per-nozzle temperatures and IFS filament slots.
-- **Manual Control**: Interactive motion jog pad, custom extrusion lengths, part cooling fan sliders, and chamber lighting toggles.
+---
+
+### 📱 Native Mobile Companion
+A Flutter-based Android and iOS companion app with full feature parity for monitoring your printers on the go.
+
+<div align="center">
+
+| Fleet Overview | Device Telemetry | Multi-Material & IFS | Motion & Jog Controls |
+| :---: | :---: | :---: | :---: |
+| <img src="docs/screenshots/app_fleet.png" width="230" alt="Mobile Fleet Overview" /> | <img src="docs/screenshots/app_device.png" width="230" alt="Mobile Device Telemetry" /> | <img src="docs/screenshots/app_material.png" width="230" alt="Multi-Material IFS" /> | <img src="docs/screenshots/app_controls.png" width="230" alt="Mobile Motion Controls" /> |
+
+</div>
+
+- **Instant Fleet Status**: At-a-glance status cards with live camera streaming and single-tap switching between printers.
+- **Toolhead & Material Monitoring**: Multi-extruder telemetry for FlashForge Creator 5 / 5 Pro IFS systems and Bambu Lab AMS Lite.
+- **Manual Motion Controls**: Touch-friendly XY jog d-pad, Z-axis jogging, home all axes, and custom step increments (0.1mm to 50mm).
+- **Direct APK Downloads**: Available for Android under [Releases](https://github.com/christianborges121/YourPrinter/releases).
+
+---
 
 ### 🧠 On-Prem AI Print Failure Watchdog
+Catch spaghetti and print failures before wasting hours of print time and filament.
+
 <p align="center">
-  <img src="docs/screenshots/ai_watchdog.png" width="55%" alt="AI Failure Watchdog Alert" />
+  <img src="docs/screenshots/app_watchdog.png" width="55%" alt="AI Failure Watchdog Alert" />
 </p>
 
-Catch spaghetti and print failures before wasting hours of print time and filament:
 - Integrated Obico (YOLO/Darknet) visual failure detection running 100% locally on your GPU
 - Automatic print pausing when failure confidence exceeds your custom threshold
 - Push notifications and Discord webhook alerts with captured failure frames
 
-### 📱 Native Mobile Companion
-A Flutter-based Android and iOS mobile app with full feature parity:
-- Low-latency camera feeds and fleet monitoring on the go
-- Local notifications when prints finish or failures are detected
-- Direct APK downloads available under [Releases](https://github.com/christianborges121/YourPrinter/releases)
+---
+
+### 📹 Low-Latency Live Camera Streaming
+Powered by an embedded [go2rtc](https://github.com/AlexxIT/go2rtc) streaming gateway:
+- Sub-second WebRTC and MJPEG streams directly from printer cameras
+- Multi-camera fleet view with simultaneous live video
+- Automatic snapshot fallback for slower or intermittent network connections
 
 ---
 
