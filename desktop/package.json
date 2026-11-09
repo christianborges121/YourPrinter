@@ -1,7 +1,7 @@
 {
   "name": "yourprinter",
   "productName": "YourPrinter",
-  "version": "1.0.43",
+  "version": "1.0.44",
   "packageManager": "pnpm@10.23.0",
   "description": "YourPrinter Unified 3D Printer Monitoring and Control Server",
   "main": "out/main/index.js",
