@@ -228,12 +228,17 @@ export class WebUIManager extends EventEmitter {
           },
         },
         (proxyRes) => {
-          res.writeHead(proxyRes.statusCode || 500, proxyRes.headers);
+          res.writeHead(proxyRes.statusCode || 500, {
+            ...proxyRes.headers,
+            'x-accel-buffering': 'no',
+          });
           proxyRes.pipe(res);
         }
       );
       proxyReq.on('error', (err) => {
-        res.status(502).json({ error: 'go2rtc proxy error', message: err.message });
+        if (!res.headersSent && !res.writableEnded) {
+          res.status(502).json({ error: 'go2rtc proxy error', message: err.message });
+        }
       });
 
       // Tear down proxy request immediately when client navigates away or disconnects

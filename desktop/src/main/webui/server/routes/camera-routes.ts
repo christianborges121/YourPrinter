@@ -16,7 +16,58 @@ import { toAppError } from '../../../utils/error.utils.js';
 import type { AuthenticatedRequest } from '../auth-middleware.js';
 import { type RouteDependencies, resolveContext, sendErrorResponse } from './route-helpers.js';
 
+interface SnapshotPayload {
+  readonly bytes: Buffer;
+  readonly contentType: string;
+}
+
+const SNAPSHOT_DEDUPE_CACHE_MS = 400;
+const TURN_CAMERA_ON_TIMEOUT_MS = 1200;
+
+function isMjpegStreamUrl(url: string): boolean {
+  return /\?action=stream\b|\/stream(?:\.mjpeg)?(?:$|\?)/i.test(url);
+}
+
+function isLikelyImagePayload(bytes: Buffer, contentType: string): boolean {
+  if (bytes.length < 4) {
+    return false;
+  }
+  const normalizedType = contentType.toLowerCase();
+  if (normalizedType.includes('multipart/x-mixed-replace') || normalizedType.startsWith('text/')) {
+    return false;
+  }
+  const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8;
+  const isPng = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+  return isJpeg || isPng || normalizedType.startsWith('image/');
+}
+
+async function awaitBoundedTurnCameraOn(backend: unknown): Promise<void> {
+  const cameraBackend = backend as { turnCameraOn?: () => Promise<boolean> };
+  if (typeof cameraBackend?.turnCameraOn !== 'function') {
+    return;
+  }
+
+  let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+  try {
+    await Promise.race([
+      cameraBackend.turnCameraOn().catch((err) => {
+        console.warn('[camera-routes] turnCameraOn failed:', err);
+        return false;
+      }),
+      new Promise<boolean>((resolve) => {
+        timeoutHandle = setTimeout(() => resolve(false), TURN_CAMERA_ON_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+  }
+}
+
 export function registerCameraRoutes(router: Router, deps: RouteDependencies): void {
+  const inFlightSnapshots = new Map<string, Promise<SnapshotPayload | null>>();
+  const recentSnapshots = new Map<string, { payload: SnapshotPayload; capturedAt: number }>();
   router.get('/camera/status', async (req: AuthenticatedRequest, res: Response) => {
     try {
       const contextResult = resolveContext(req, deps, { requireBackendReady: true });
@@ -87,6 +138,8 @@ export function registerCameraRoutes(router: Router, deps: RouteDependencies): v
         (backend as any)?.ipAddress ||
         '';
 
+      await awaitBoundedTurnCameraOn(backend);
+
       const ensuredStream = await resolveAndEnsureCameraStream({
         contextId,
         printerIpAddress: ip,
@@ -95,10 +148,6 @@ export function registerCameraRoutes(router: Router, deps: RouteDependencies): v
         go2rtcService: getGo2rtcService(),
         backend,
       });
-
-      if (typeof (backend as unknown as { turnCameraOn?: () => Promise<boolean> }).turnCameraOn === 'function') {
-        void (backend as unknown as { turnCameraOn: () => Promise<boolean> }).turnCameraOn();
-      }
 
       if (!ensuredStream) {
         return sendErrorResponse<StandardAPIResponse>(res, 503, 'Camera not available for this printer');
@@ -170,66 +219,102 @@ export function registerCameraRoutes(router: Router, deps: RouteDependencies): v
         (backend as any)?.ipAddress ||
         '';
 
-      const go2rtcService = getGo2rtcService();
-      await resolveAndEnsureCameraStream({
-        contextId,
-        printerIpAddress: ip,
-        printerFeatures: backend.getBackendStatus().features,
-        userConfig: getCameraUserConfig(contextId),
-        go2rtcService,
-        backend,
-      });
-
-      const snapshot = await go2rtcService.captureSnapshot(contextId, 4000);
-      if (snapshot && snapshot.bytes && snapshot.bytes.length > 0) {
-        res.setHeader('Content-Type', snapshot.contentType || 'image/jpeg');
+      const cached = recentSnapshots.get(contextId);
+      if (cached && Date.now() - cached.capturedAt < SNAPSHOT_DEDUPE_CACHE_MS) {
+        res.setHeader('Content-Type', cached.payload.contentType);
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-        return res.send(Buffer.from(snapshot.bytes));
+        return res.send(cached.payload.bytes);
       }
 
-      // Fallback 1: check if BambuCameraBridge has a decoded snapshot
-      const serial = context.printerDetails.SerialNumber;
-      if (serial) {
-        const bridge = getBambuCameraBridge();
-        const bridgeSnapshot = bridge.getSnapshot(serial);
-        if (bridgeSnapshot && bridgeSnapshot.length > 0) {
-          res.setHeader('Content-Type', 'image/jpeg');
-          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-          return res.send(bridgeSnapshot);
-        }
-      }
-
-      // Fallback 2: direct Flashforge & CFW snapshot queries
-      const customUrl = (context.printerDetails as any).customCameraUrl;
-      const candidateUrls: string[] = [];
-      if (customUrl && typeof customUrl === 'string' && customUrl.startsWith('http')) {
-        const snapCandidate = customUrl.replace('?action=stream', '?action=snapshot');
-        candidateUrls.push(snapCandidate);
-        if (snapCandidate !== customUrl) candidateUrls.push(customUrl);
-      }
-      if (ip) {
-        candidateUrls.push(
-          `http://${ip}:8080/?action=snapshot`,
-          `http://${ip}/webcam/?action=snapshot`,
-          `http://${ip}:8080/snapshot`,
-        );
-      }
-      for (const candidate of candidateUrls) {
-        try {
-          const directResp = await fetch(candidate, {
-            signal: AbortSignal.timeout(2000),
+      let capturePromise = inFlightSnapshots.get(contextId);
+      if (!capturePromise) {
+        capturePromise = (async (): Promise<SnapshotPayload | null> => {
+          const go2rtcService = getGo2rtcService();
+          await resolveAndEnsureCameraStream({
+            contextId,
+            printerIpAddress: ip,
+            printerFeatures: backend.getBackendStatus().features,
+            userConfig: getCameraUserConfig(contextId),
+            go2rtcService,
+            backend,
           });
-          if (directResp.ok) {
-            const bytes = Buffer.from(await directResp.arrayBuffer());
-            if (bytes.length > 0) {
-              res.setHeader('Content-Type', directResp.headers.get('content-type') || 'image/jpeg');
-              res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-              return res.send(bytes);
+
+          const snapshot = await go2rtcService.captureSnapshot(contextId, 4000);
+          if (snapshot && snapshot.bytes && snapshot.bytes.length > 0) {
+            return {
+              bytes: Buffer.from(snapshot.bytes),
+              contentType: snapshot.contentType || 'image/jpeg',
+            };
+          }
+
+          // Fallback 1: check if BambuCameraBridge has a decoded snapshot
+          const details = context.printerDetails as unknown as Record<string, unknown>;
+          const serial =
+            (typeof details.SerialNumber === 'string' && details.SerialNumber) ||
+            (typeof details.serialNumber === 'string' && details.serialNumber) ||
+            '';
+          if (serial) {
+            const bridge = getBambuCameraBridge();
+            const bridgeSnapshot = bridge.getSnapshot(serial);
+            if (bridgeSnapshot && bridgeSnapshot.length > 0) {
+              return {
+                bytes: bridgeSnapshot,
+                contentType: 'image/jpeg',
+              };
             }
           }
-        } catch {
-          // Try next candidate
-        }
+
+          // Fallback 2: direct Flashforge & CFW discrete snapshot queries (never open infinite MJPEG streams here)
+          const customUrl = details.customCameraUrl;
+          const candidateUrls: string[] = [];
+          if (typeof customUrl === 'string' && customUrl.startsWith('http')) {
+            const snapCandidate = customUrl.replace('?action=stream', '?action=snapshot');
+            if (!isMjpegStreamUrl(snapCandidate)) {
+              candidateUrls.push(snapCandidate);
+            }
+          }
+          if (ip) {
+            candidateUrls.push(
+              `http://${ip}:8080/?action=snapshot`,
+              `http://${ip}/webcam/?action=snapshot`,
+              `http://${ip}:8080/snapshot`
+            );
+          }
+
+          for (const candidate of candidateUrls) {
+            try {
+              const directResp = await fetch(candidate, {
+                signal: AbortSignal.timeout(2000),
+              });
+              if (directResp.ok) {
+                const contentType = directResp.headers.get('content-type') || 'image/jpeg';
+                const bytes = Buffer.from(await directResp.arrayBuffer());
+                if (isLikelyImagePayload(bytes, contentType)) {
+                  return {
+                    bytes,
+                    contentType,
+                  };
+                }
+              }
+            } catch {
+              // Try next candidate
+            }
+          }
+
+          return null;
+        })().finally(() => {
+          inFlightSnapshots.delete(contextId);
+        });
+
+        inFlightSnapshots.set(contextId, capturePromise);
+      }
+
+      const captured = await capturePromise;
+      if (captured) {
+        recentSnapshots.set(contextId, { payload: captured, capturedAt: Date.now() });
+        res.setHeader('Content-Type', captured.contentType);
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        return res.send(captured.bytes);
       }
 
       return res.status(503).send('Camera snapshot unavailable');

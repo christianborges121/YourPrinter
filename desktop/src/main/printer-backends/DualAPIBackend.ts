@@ -40,12 +40,14 @@ import { BasePrinterBackend } from './BasePrinterBackend.js';
  */
 export abstract class DualAPIBackend extends BasePrinterBackend {
   private static readonly FALLBACK_CAMERA_RETRY_MS = 60_000;
+  private static readonly OEM_CAMERA_DROPOUT_GRACE_POLLS = 3;
 
   protected fiveMClient!: FiveMClient;
   protected legacyClient: FlashForgeClient | null = null;
   protected productInfo: Product | null = null;
   protected lastFiltrationMode: 'external' | 'internal' | 'none' = 'none';
   private lastFallbackCameraProbeAt = 0;
+  private consecutiveMissingOemCameraPolls = 0;
 
   /**
    * Cache for last known filament usage data while printing
@@ -1422,12 +1424,21 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
   protected async processMachineInfo(machineInfo: unknown): Promise<void> {
     const info = machineInfo as { CameraStreamUrl?: unknown } | null;
     const cameraStreamUrl = typeof info?.CameraStreamUrl === 'string' ? info.CameraStreamUrl : '';
-    this.updateOEMCameraStreamUrl(cameraStreamUrl);
 
     if (cameraStreamUrl.trim() !== '') {
+      this.consecutiveMissingOemCameraPolls = 0;
+      this.updateOEMCameraStreamUrl(cameraStreamUrl);
       this.updateFallbackCameraStreamUrl('');
       this.lastFallbackCameraProbeAt = 0;
       return;
+    }
+
+    if (this.oemCameraStreamUrl.trim() !== '') {
+      this.consecutiveMissingOemCameraPolls += 1;
+      if (this.consecutiveMissingOemCameraPolls < DualAPIBackend.OEM_CAMERA_DROPOUT_GRACE_POLLS) {
+        return;
+      }
+      this.updateOEMCameraStreamUrl('');
     }
 
     if (this.fallbackCameraStreamUrl.trim() !== '') {
@@ -1894,6 +1905,7 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
     // Clear filament usage cache on disconnect
     this.lastFilamentUsageCache = null;
     this.lastFallbackCameraProbeAt = 0;
+    this.consecutiveMissingOemCameraPolls = 0;
 
     // Call parent dispose to clean up clients
     await super.dispose();
