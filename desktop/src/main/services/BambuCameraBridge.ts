@@ -18,12 +18,18 @@ export interface BambuCameraConfig {
 }
 
 export class BambuCameraSession extends EventEmitter {
+  private static readonly CONNECT_TIMEOUT_MS = 5000;
+  private static readonly STREAM_IDLE_TIMEOUT_MS = 30_000;
+  private static readonly RECONNECT_DELAY_MS = 1000;
+
   private socket: tls.TLSSocket | null = null;
   private incomingBuffer = Buffer.alloc(0);
   private clients = new Set<http.ServerResponse>();
   private idleTimeoutTimer: NodeJS.Timeout | null = null;
-  private isConnecting = false;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  private connectPromise: Promise<boolean> | null = null;
   private latestFrame: Buffer | null = null;
+  private isDisposed = false;
 
   constructor(
     public readonly printerId: string,
@@ -54,61 +60,122 @@ export class BambuCameraSession extends EventEmitter {
    * Connect to printer port 6000 over TLS
    */
   public async connect(): Promise<boolean> {
+    if (this.isDisposed) {
+      return false;
+    }
     if (this.socket && !this.socket.destroyed) {
       return true;
     }
-    if (this.isConnecting) {
-      return false;
+    if (this.connectPromise) {
+      return this.connectPromise;
     }
 
-    this.isConnecting = true;
     this.cancelIdleTimer();
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
 
-    return new Promise((resolve) => {
+    this.connectPromise = new Promise<boolean>((resolve) => {
+      let settled = false;
+      let connectTimer: NodeJS.Timeout | null = null;
+
+      const finish = (ok: boolean) => {
+        if (connectTimer) {
+          clearTimeout(connectTimer);
+          connectTimer = null;
+        }
+        if (!settled) {
+          settled = true;
+          this.connectPromise = null;
+          resolve(ok);
+        }
+      };
+
       try {
         const socket = tls.connect(
           {
             host: this.config.ip,
             port: 6000,
             rejectUnauthorized: false,
-            timeout: 4000,
           },
           () => {
-            this.isConnecting = false;
+            if (this.isDisposed) {
+              socket.destroy();
+              finish(false);
+              return;
+            }
+            if (connectTimer) {
+              clearTimeout(connectTimer);
+              connectTimer = null;
+            }
+            socket.setTimeout(BambuCameraSession.STREAM_IDLE_TIMEOUT_MS);
             this.socket = socket;
             const authPacket = BambuCameraSession.createAuthPacket(this.config.accessCode);
             socket.write(authPacket);
-            resolve(true);
+            finish(true);
           }
         );
 
-        socket.on('timeout', () => {
-          console.warn(`[BambuCameraSession:${this.printerId}] TLS socket timeout on port 6000 (camera standby/idle)`);
+        connectTimer = setTimeout(() => {
+          console.warn(`[BambuCameraSession:${this.printerId}] TLS connect timeout on port 6000`);
           socket.destroy();
-          this.cleanupSocket();
-          resolve(false);
+          this.cleanupSocket(socket);
+          finish(false);
+        }, BambuCameraSession.CONNECT_TIMEOUT_MS);
+
+        socket.on('timeout', () => {
+          console.warn(`[BambuCameraSession:${this.printerId}] TLS stream idle timeout on port 6000`);
+          socket.destroy();
+          this.cleanupSocket(socket);
+          finish(false);
+          this.scheduleClientReconnect();
         });
 
         socket.on('data', (data: Buffer) => {
+          if (this.socket !== socket) {
+            return;
+          }
           this.handleIncomingData(data);
         });
 
         socket.on('error', (err: Error) => {
           console.warn(`[BambuCameraSession:${this.printerId}] TLS socket error:`, err.message);
-          this.cleanupSocket();
-          resolve(false);
+          this.cleanupSocket(socket);
+          finish(false);
+          this.scheduleClientReconnect();
         });
 
         socket.on('close', () => {
-          this.cleanupSocket();
-          resolve(false);
+          this.cleanupSocket(socket);
+          finish(false);
+          this.scheduleClientReconnect();
         });
       } catch (err) {
-        this.isConnecting = false;
         console.error(`[BambuCameraSession:${this.printerId}] Connection exception:`, err);
-        resolve(false);
+        finish(false);
       }
     });
+
+    return this.connectPromise;
+  }
+
+  private scheduleClientReconnect(): void {
+    if (
+      this.isDisposed ||
+      this.clients.size === 0 ||
+      this.reconnectTimer ||
+      this.connectPromise ||
+      (this.socket && !this.socket.destroyed)
+    ) {
+      return;
+    }
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      if (!this.isDisposed && this.clients.size > 0 && (!this.socket || this.socket.destroyed)) {
+        void this.connect();
+      }
+    }, BambuCameraSession.RECONNECT_DELAY_MS);
   }
 
   private handleIncomingData(data: Buffer): void {
@@ -216,7 +283,10 @@ export class BambuCameraSession extends EventEmitter {
     }
   }
 
-  private cleanupSocket(): void {
+  private cleanupSocket(expectedSocket?: tls.TLSSocket): void {
+    if (expectedSocket && this.socket && this.socket !== expectedSocket) {
+      return;
+    }
     if (this.socket) {
       try {
         this.socket.destroy();
@@ -225,12 +295,16 @@ export class BambuCameraSession extends EventEmitter {
       }
       this.socket = null;
     }
-    this.isConnecting = false;
     this.incomingBuffer = Buffer.alloc(0);
   }
 
   public dispose(): void {
+    this.isDisposed = true;
     this.cancelIdleTimer();
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     for (const res of this.clients) {
       try {
         res.end();

@@ -37,6 +37,7 @@ describe('camera-routes', () => {
     addStream: jest.fn(),
     removeStream: jest.fn(),
     getStreamConfig: jest.fn(),
+    captureSnapshot: jest.fn(),
   };
   const configManager = {
     get: jest.fn(),
@@ -256,5 +257,42 @@ describe('camera-routes', () => {
       mode: 'webrtc,mse,mjpeg',
       showCameraFps: true,
     });
+  });
+
+  it('deduplicates concurrent snapshot requests for the same printer context', async () => {
+    const jpegBytes = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
+    let resolveCapture: ((val: { bytes: Uint8Array; contentType: string; filename: string }) => void) | null = null;
+    go2rtcService.captureSnapshot.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveCapture = resolve;
+        })
+    );
+
+    const deps = createDependencies();
+    const server = await startTestServer((app) => {
+      const router = express.Router();
+      registerCameraRoutes(router, deps);
+      app.use('/api', router);
+    });
+
+    const req1 = fetch(`${server.baseUrl}/api/camera/snapshot?contextId=context-1&t=1`);
+    const req2 = fetch(`${server.baseUrl}/api/camera/snapshot?contextId=context-1&t=2`);
+
+    // Allow first request to reach captureSnapshot before resolving
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(go2rtcService.captureSnapshot).toHaveBeenCalledTimes(1);
+    resolveCapture?.({
+      bytes: jpegBytes,
+      contentType: 'image/jpeg',
+      filename: 'snap.jpg',
+    });
+
+    const [res1, res2] = await Promise.all([req1, req2]);
+    await server.close();
+
+    expect(res1.status).toBe(200);
+    expect(res2.status).toBe(200);
+    expect(go2rtcService.captureSnapshot).toHaveBeenCalledTimes(1);
   });
 });

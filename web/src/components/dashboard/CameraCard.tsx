@@ -7,7 +7,6 @@ import {
   RefreshCw,
   Infinity as InfinityIcon,
   ShieldAlert,
-  AlertCircle,
   Camera,
   Lightbulb,
   LightbulbOff,
@@ -20,6 +19,13 @@ interface CameraCardProps {
   onOpenHud: () => void;
   onOpenWatchdog: () => void;
 }
+
+const MAX_MJPEG_RETRIES = 2;
+const MJPEG_RETRY_DELAY_MS = 1000;
+const SNAPSHOT_POLL_INTERVAL_MS = 1000;
+const SNAPSHOT_ERROR_RETRY_MS = 2000;
+const SNAPSHOT_FAILURE_THRESHOLD_WITH_FRAME = 3;
+const SNAPSHOT_FAILURE_THRESHOLD_INITIAL = 2;
 
 export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdog }) => {
   const { activeContextId, activeContext, status, features, capabilities, setLed } = usePrinter();
@@ -38,10 +44,12 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
   const [continuous, setContinuous] = useState<boolean>(getCameraContinuous());
   const [streamMode, setStreamMode] = useState<'webrtc' | 'mjpeg' | 'snapshot'>('snapshot');
   const [mjpegUrl, setMjpegUrl] = useState<string>('');
+  const [mjpegStreamName, setMjpegStreamName] = useState<string>('');
   const [snapshotUrl, setSnapshotUrl] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isCapturing, setIsCapturing] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [restartNonce, setRestartNonce] = useState<number>(0);
 
   const handleCaptureSnapshot = async () => {
     if (isCapturing) return;
@@ -66,7 +74,15 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const signalingWsRef = useRef<WebSocket | null>(null);
   const countdownTimerRef = useRef<number | null>(null);
+  const webrtcFallbackTimerRef = useRef<number | null>(null);
+  const mjpegRetryTimerRef = useRef<number | null>(null);
+  const mjpegRetryCountRef = useRef<number>(0);
   const snapshotPollTimerRef = useRef<number | null>(null);
+  const snapshotAbortRef = useRef<AbortController | null>(null);
+  const snapshotObjectUrlRef = useRef<string | null>(null);
+  const consecutiveSnapshotErrorsRef = useRef<number>(0);
+  const hasLoadedFrameRef = useRef<boolean>(false);
+  const streamSessionRef = useRef<number>(0);
 
   const watchdog = status?.watchdog;
   const isAlert =
@@ -85,8 +101,11 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
     }
   };
 
-  // Teardown connections
-  const stopStream = () => {
+  const closeWebRtcAndSignaling = () => {
+    if (webrtcFallbackTimerRef.current) {
+      clearTimeout(webrtcFallbackTimerRef.current);
+      webrtcFallbackTimerRef.current = null;
+    }
     if (signalingWsRef.current) {
       try {
         signalingWsRef.current.close(1000, 'Stream stopped');
@@ -98,10 +117,18 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
     if (peerConnectionRef.current) {
       try {
         peerConnectionRef.current.getSenders().forEach((s) => {
-          try { s.track?.stop(); } catch {}
+          try {
+            s.track?.stop();
+          } catch {
+            // ignore
+          }
         });
         peerConnectionRef.current.getReceivers().forEach((r) => {
-          try { r.track?.stop(); } catch {}
+          try {
+            r.track?.stop();
+          } catch {
+            // ignore
+          }
         });
         peerConnectionRef.current.close();
       } catch {
@@ -114,7 +141,11 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
         try {
           const stream = videoRef.current.srcObject as MediaStream;
           stream.getTracks().forEach((track) => {
-            try { track.stop(); } catch {}
+            try {
+              track.stop();
+            } catch {
+              // ignore
+            }
           });
         } catch {
           // ignore
@@ -122,48 +153,183 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
       }
       videoRef.current.srcObject = null;
     }
+  };
+
+  // Teardown connections
+  const stopStream = () => {
+    streamSessionRef.current += 1;
+    closeWebRtcAndSignaling();
+
     if (countdownTimerRef.current) {
       clearInterval(countdownTimerRef.current);
       countdownTimerRef.current = null;
     }
+    if (mjpegRetryTimerRef.current) {
+      clearTimeout(mjpegRetryTimerRef.current);
+      mjpegRetryTimerRef.current = null;
+    }
     if (snapshotPollTimerRef.current) {
-      clearInterval(snapshotPollTimerRef.current);
+      clearTimeout(snapshotPollTimerRef.current);
       snapshotPollTimerRef.current = null;
     }
+    if (snapshotAbortRef.current) {
+      try {
+        snapshotAbortRef.current.abort();
+      } catch {
+        // ignore
+      }
+      snapshotAbortRef.current = null;
+    }
+    if (snapshotObjectUrlRef.current) {
+      try {
+        URL.revokeObjectURL(snapshotObjectUrlRef.current);
+      } catch {
+        // ignore
+      }
+      snapshotObjectUrlRef.current = null;
+    }
+    mjpegRetryCountRef.current = 0;
+    consecutiveSnapshotErrorsRef.current = 0;
+    hasLoadedFrameRef.current = false;
     setMjpegUrl('');
+    setMjpegStreamName('');
+    setSnapshotUrl('');
   };
 
-  // Start snapshot poll fallback
-  const startSnapshotPolling = () => {
-    setStreamMode('snapshot');
-    setIsLoading(false);
-    setSnapshotUrl(api.getSnapshotUrl(activeContextId || undefined, Date.now()));
+  // Sequential snapshot polling with auth support, frame retention, and error hysteresis
+  const startSnapshotPolling = (targetContextId: string | undefined, sessionId: number) => {
+    if (streamSessionRef.current !== sessionId) return;
 
-    if (snapshotPollTimerRef.current) clearInterval(snapshotPollTimerRef.current);
-    snapshotPollTimerRef.current = window.setInterval(() => {
-      setSnapshotUrl(api.getSnapshotUrl(activeContextId || undefined, Date.now()));
-    }, 1200);
+    closeWebRtcAndSignaling();
+    if (mjpegRetryTimerRef.current) {
+      clearTimeout(mjpegRetryTimerRef.current);
+      mjpegRetryTimerRef.current = null;
+    }
+    if (snapshotPollTimerRef.current) {
+      clearTimeout(snapshotPollTimerRef.current);
+      snapshotPollTimerRef.current = null;
+    }
+    if (snapshotAbortRef.current) {
+      try {
+        snapshotAbortRef.current.abort();
+      } catch {
+        // ignore
+      }
+      snapshotAbortRef.current = null;
+    }
+
+    setMjpegUrl('');
+    setStreamMode('snapshot');
+
+    const pollOnce = async () => {
+      if (streamSessionRef.current !== sessionId) return;
+
+      const controller = new AbortController();
+      snapshotAbortRef.current = controller;
+
+      try {
+        const blob = await api.fetchSnapshotBlob(targetContextId, {
+          signal: controller.signal,
+          cacheBuster: Date.now(),
+        });
+
+        if (streamSessionRef.current !== sessionId) return;
+        if (!blob || blob.size === 0) {
+          throw new Error('Empty snapshot payload');
+        }
+
+        const nextUrl = URL.createObjectURL(blob);
+        const prevUrl = snapshotObjectUrlRef.current;
+        snapshotObjectUrlRef.current = nextUrl;
+
+        if (prevUrl) {
+          window.setTimeout(() => {
+            try {
+              URL.revokeObjectURL(prevUrl);
+            } catch {
+              // ignore
+            }
+          }, 500);
+        }
+
+        consecutiveSnapshotErrorsRef.current = 0;
+        hasLoadedFrameRef.current = true;
+        setSnapshotUrl(nextUrl);
+        setIsLoading(false);
+        setErrorMsg(null);
+
+        snapshotPollTimerRef.current = window.setTimeout(() => {
+          void pollOnce();
+        }, SNAPSHOT_POLL_INTERVAL_MS);
+      } catch (err) {
+        if ((err as { name?: string })?.name === 'AbortError' || streamSessionRef.current !== sessionId) {
+          return;
+        }
+
+        consecutiveSnapshotErrorsRef.current += 1;
+        const failureThreshold = hasLoadedFrameRef.current
+          ? SNAPSHOT_FAILURE_THRESHOLD_WITH_FRAME
+          : SNAPSHOT_FAILURE_THRESHOLD_INITIAL;
+
+        if (consecutiveSnapshotErrorsRef.current >= failureThreshold) {
+          setIsLoading(false);
+          setErrorMsg('Camera stream or snapshot unavailable');
+        }
+
+        snapshotPollTimerRef.current = window.setTimeout(() => {
+          void pollOnce();
+        }, SNAPSHOT_ERROR_RETRY_MS);
+      }
+    };
+
+    void pollOnce();
+  };
+
+  // Switch cleanly from WebRTC to MJPEG (or snapshot fallback) without leaving stale signaling open
+  const fallbackFromWebRtc = (
+    streamName: string | undefined,
+    targetContextId: string | undefined,
+    sessionId: number
+  ) => {
+    if (streamSessionRef.current !== sessionId) return;
+    closeWebRtcAndSignaling();
+
+    if (streamName) {
+      mjpegRetryCountRef.current = 0;
+      setMjpegStreamName(streamName);
+      setMjpegUrl(api.getStreamMjpegUrl(streamName));
+      setStreamMode('mjpeg');
+      setIsLoading(false);
+    } else {
+      startSnapshotPolling(targetContextId, sessionId);
+    }
   };
 
   // Connect WebRTC, MJPEG stream, or fallback to Snapshot
   const startStream = async (isCancelledCheck?: () => boolean) => {
     stopStream();
+    const sessionId = streamSessionRef.current;
+    const targetContextId = activeContextId || undefined;
+    const isStale = () => Boolean(isCancelledCheck?.()) || streamSessionRef.current !== sessionId;
+
     setIsLoading(true);
     setErrorMsg(null);
     setCountdown(30);
 
     try {
-      const config = await api.getCameraProxyConfig(activeContextId || undefined);
-      if (isCancelledCheck?.()) return;
+      const config = await api.getCameraProxyConfig(targetContextId);
+      if (isStale()) return;
 
       if (!config.success) {
-        startSnapshotPolling();
+        startSnapshotPolling(targetContextId, sessionId);
         return;
       }
 
       // If camera stream is MJPEG (Creator 5 Pro, Bambu Bridge, Adventurer 5M, etc.), stream directly via go2rtc MJPEG
       if (config.mode === 'mjpeg' || config.streamType === 'mjpeg') {
         const streamName = config.streamName || `printer_${activeContextId || ''}`;
+        mjpegRetryCountRef.current = 0;
+        setMjpegStreamName(streamName);
         setMjpegUrl(api.getStreamMjpegUrl(streamName));
         setStreamMode('mjpeg');
         setIsLoading(false);
@@ -171,8 +337,7 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
       }
 
       if (!config.wsUrl) {
-        // Fallback to snapshot polling
-        startSnapshotPolling();
+        startSnapshotPolling(targetContextId, sessionId);
         return;
       }
 
@@ -184,11 +349,17 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
         peerConnectionRef.current = pc;
 
         pc.ontrack = (event) => {
-          if (isCancelledCheck?.()) return;
+          if (isStale()) return;
+          if (webrtcFallbackTimerRef.current) {
+            clearTimeout(webrtcFallbackTimerRef.current);
+            webrtcFallbackTimerRef.current = null;
+          }
           if (videoRef.current && event.streams[0]) {
             videoRef.current.srcObject = event.streams[0];
+            hasLoadedFrameRef.current = true;
             setStreamMode('webrtc');
             setIsLoading(false);
+            setErrorMsg(null);
           }
         };
 
@@ -201,33 +372,42 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
         signalingWsRef.current = ws;
 
         ws.onopen = async () => {
-          if (isCancelledCheck?.()) {
-            try { ws.close(); } catch {}
+          if (isStale()) {
+            try {
+              ws.close();
+            } catch {
+              // ignore
+            }
             return;
           }
-          const offer = await pc.createOffer({ offerToReceiveVideo: true, offerToReceiveAudio: false });
-          if (isCancelledCheck?.()) {
-            try { ws.close(); } catch {}
-            return;
+          try {
+            const offer = await pc.createOffer({ offerToReceiveVideo: true, offerToReceiveAudio: false });
+            if (isStale() || pc.signalingState === 'closed') {
+              try {
+                ws.close();
+              } catch {
+                // ignore
+              }
+              return;
+            }
+            await pc.setLocalDescription(offer);
+            if (!isStale() && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'webrtc/offer', value: offer.sdp }));
+            }
+          } catch {
+            if (!isStale()) {
+              fallbackFromWebRtc(config.streamName, targetContextId, sessionId);
+            }
           }
-          await pc.setLocalDescription(offer);
-          ws.send(JSON.stringify({ type: 'webrtc/offer', value: offer.sdp }));
         };
 
         ws.onmessage = async (evt) => {
-          if (isCancelledCheck?.()) return;
+          if (isStale()) return;
           try {
             const data = JSON.parse(evt.data);
             if (data.type === 'error') {
               console.warn('[CameraCard] WebRTC error from go2rtc:', data.value);
-              // Codecs not matched or WebRTC unsupported for stream -> fallback to MJPEG
-              if (config.streamName) {
-                setMjpegUrl(api.getStreamMjpegUrl(config.streamName));
-                setStreamMode('mjpeg');
-                setIsLoading(false);
-              } else {
-                startSnapshotPolling();
-              }
+              fallbackFromWebRtc(config.streamName, targetContextId, sessionId);
               return;
             }
             if (data.type === 'webrtc/answer' && pc.signalingState !== 'closed') {
@@ -241,42 +421,24 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
         };
 
         ws.onerror = () => {
-          if (isCancelledCheck?.()) return;
-          if (config.streamName) {
-            setMjpegUrl(api.getStreamMjpegUrl(config.streamName));
-            setStreamMode('mjpeg');
-            setIsLoading(false);
-          } else {
-            startSnapshotPolling();
-          }
+          if (isStale()) return;
+          fallbackFromWebRtc(config.streamName, targetContextId, sessionId);
         };
 
         // Timeout fallback to MJPEG or snapshot if WebRTC takes > 3s
-        setTimeout(() => {
-          if (isCancelledCheck?.()) return;
+        webrtcFallbackTimerRef.current = window.setTimeout(() => {
+          if (isStale()) return;
           if (pc.iceConnectionState !== 'connected' && pc.iceConnectionState !== 'completed') {
-            if (config.streamName) {
-              setMjpegUrl(api.getStreamMjpegUrl(config.streamName));
-              setStreamMode('mjpeg');
-              setIsLoading(false);
-            } else {
-              startSnapshotPolling();
-            }
+            fallbackFromWebRtc(config.streamName, targetContextId, sessionId);
           }
         }, 3000);
       } catch {
-        if (isCancelledCheck?.()) return;
-        if (config.streamName) {
-          setMjpegUrl(api.getStreamMjpegUrl(config.streamName));
-          setStreamMode('mjpeg');
-          setIsLoading(false);
-        } else {
-          startSnapshotPolling();
-        }
+        if (isStale()) return;
+        fallbackFromWebRtc(config.streamName, targetContextId, sessionId);
       }
     } catch {
-      if (!isCancelledCheck?.()) {
-        startSnapshotPolling();
+      if (!isStale()) {
+        startSnapshotPolling(targetContextId, sessionId);
       }
     }
   };
@@ -292,7 +454,7 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
       isCancelled = true;
       stopStream();
     };
-  }, [isPlaying, activeContextId]);
+  }, [isPlaying, activeContextId, restartNonce]);
 
   // 30s Countdown Timer
   useEffect(() => {
@@ -315,6 +477,34 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
       if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
     };
   }, [isPlaying, continuous]);
+
+  const handleMjpegError = () => {
+    const activeSession = streamSessionRef.current;
+    if (mjpegRetryCountRef.current < MAX_MJPEG_RETRIES && mjpegStreamName) {
+      mjpegRetryCountRef.current += 1;
+      console.warn(
+        `[CameraCard] MJPEG stream interrupted, retrying (${mjpegRetryCountRef.current}/${MAX_MJPEG_RETRIES})...`
+      );
+      if (mjpegRetryTimerRef.current) {
+        clearTimeout(mjpegRetryTimerRef.current);
+      }
+      mjpegRetryTimerRef.current = window.setTimeout(() => {
+        if (streamSessionRef.current !== activeSession) return;
+        setMjpegUrl(`${api.getStreamMjpegUrl(mjpegStreamName)}&_r=${Date.now()}`);
+      }, MJPEG_RETRY_DELAY_MS);
+      return;
+    }
+
+    console.warn('[CameraCard] MJPEG stream failed, falling back to snapshot polling');
+    startSnapshotPolling(activeContextId || undefined, activeSession);
+  };
+
+  const handleRestartStream = () => {
+    setErrorMsg(null);
+    setCountdown(30);
+    setIsPlaying(true);
+    setRestartNonce((prev) => prev + 1);
+  };
 
   return (
     <div className="bg-[#1E1E1E] border border-[#2E2E2E] rounded-xl overflow-hidden shadow-sm flex flex-col">
@@ -355,10 +545,7 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
 
           {/* Reconnect / Refresh Button */}
           <button
-            onClick={() => {
-              setIsPlaying(true);
-              startStream();
-            }}
+            onClick={handleRestartStream}
             className="p-1.5 rounded-lg text-[#94A3B8] hover:text-[#F3F4F6] hover:bg-[#262626] transition-colors"
             title="Reconnect Stream"
           >
@@ -436,17 +623,16 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
             alt="Live Camera Stream"
             className="w-full h-full object-contain"
             onLoad={() => {
+              mjpegRetryCountRef.current = 0;
+              hasLoadedFrameRef.current = true;
               setIsLoading(false);
               if (errorMsg) setErrorMsg(null);
             }}
-            onError={() => {
-              console.warn('[CameraCard] MJPEG stream failed, falling back to snapshot polling');
-              startSnapshotPolling();
-            }}
+            onError={handleMjpegError}
           />
         )}
 
-        {/* Snapshot Fallback */}
+        {/* Snapshot Fallback (Object URLs updated sequentially) */}
         {streamMode === 'snapshot' && isPlaying && snapshotUrl && (
           <img
             src={snapshotUrl}
@@ -457,14 +643,20 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
               if (errorMsg) setErrorMsg(null);
             }}
             onError={() => {
-              setErrorMsg('Camera stream or snapshot unavailable');
+              consecutiveSnapshotErrorsRef.current += 1;
+              const threshold = hasLoadedFrameRef.current
+                ? SNAPSHOT_FAILURE_THRESHOLD_WITH_FRAME
+                : SNAPSHOT_FAILURE_THRESHOLD_INITIAL;
+              if (consecutiveSnapshotErrorsRef.current >= threshold) {
+                setErrorMsg('Camera stream or snapshot unavailable');
+              }
             }}
           />
         )}
 
         {/* Error / Standby Helper Overlay */}
         {errorMsg && isPlaying && !isLoading && (
-          <div className="absolute inset-0 bg-black/85 flex flex-col items-center justify-center gap-2.5 p-6 text-center">
+          <div className="absolute inset-0 z-10 bg-black/85 flex flex-col items-center justify-center gap-2.5 p-6 text-center">
             <div className="w-10 h-10 rounded-full bg-[#EF4444]/20 border border-[#EF4444]/40 flex items-center justify-center text-[#EF4444]">
               <Video size={20} />
             </div>
@@ -473,10 +665,7 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
               Flashforge printers only support 1 active camera stream. Please close FlashPrint or Flash Studio if open, or specify a Custom Camera URL in Settings if using Klipper/CFW.
             </p>
             <button
-              onClick={() => {
-                setErrorMsg(null);
-                startStream();
-              }}
+              onClick={handleRestartStream}
               className="mt-1 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#00AE42] hover:bg-[#009638] text-white text-xs font-semibold shadow-sm transition-colors cursor-pointer"
             >
               <RefreshCw size={13} />
@@ -487,7 +676,7 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
 
         {/* Paused / Idle State Overlay */}
         {!isPlaying && (
-          <div className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center gap-3 p-4 text-center">
+          <div className="absolute inset-0 z-10 bg-black/75 flex flex-col items-center justify-center gap-3 p-4 text-center">
             <button
               onClick={() => {
                 setIsPlaying(true);
@@ -504,22 +693,14 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
 
         {/* Loading Spinner */}
         {isLoading && isPlaying && (
-          <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-2">
+          <div className="absolute inset-0 z-10 bg-black/60 flex flex-col items-center justify-center gap-2">
             <RefreshCw size={24} className="text-[#00AE42] animate-spin" />
             <span className="text-xs text-[#94A3B8]">Connecting to camera stream...</span>
           </div>
         )}
 
-        {/* Error overlay */}
-        {errorMsg && (
-          <div className="absolute top-3 left-3 bg-[#EF4444]/80 text-white text-xs px-2.5 py-1 rounded flex items-center gap-1.5">
-            <AlertCircle size={14} />
-            <span>{errorMsg}</span>
-          </div>
-        )}
-
         {/* Top-Right Badge: Live indicator + 30s Countdown / Continuous */}
-        {isPlaying && (
+        {isPlaying && !errorMsg && (
           <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 text-xs">
             <span className="w-2 h-2 rounded-full bg-[#00AE42] shadow-[0_0_8px_#00AE42] animate-pulse" />
             <span className="font-semibold text-white uppercase text-[10px] tracking-wider">LIVE</span>
@@ -535,7 +716,7 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
         )}
 
         {/* Top-Left Badge: Mode indicator */}
-        {isPlaying && (
+        {isPlaying && !errorMsg && (
           <div className="absolute top-3 left-3 bg-black/50 backdrop-blur-md px-2 py-0.5 rounded text-[10px] font-medium text-[#94A3B8] border border-white/5 uppercase">
             {streamMode === 'webrtc' ? 'Live HD' : 'Live Stream'}
           </div>

@@ -306,13 +306,22 @@ class ApiClient {
     });
   }
 
-  async fetchSnapshotBlob(contextId?: string): Promise<Blob> {
+  async fetchSnapshotBlob(contextId?: string, options?: { signal?: AbortSignal; cacheBuster?: number }): Promise<Blob> {
     const baseUrl = getServerUrl();
-    const url = `${baseUrl}/api/camera/snapshot${contextId ? `?contextId=${encodeURIComponent(contextId)}` : ''}`;
+    const params = new URLSearchParams();
+    params.set('t', String(options?.cacheBuster ?? Date.now()));
+    if (contextId) {
+      params.set('contextId', contextId);
+    }
+    const url = `${baseUrl}/api/camera/snapshot?${params.toString()}`;
     const token = getAuthToken();
     const headers: Record<string, string> = {};
     if (token) headers.Authorization = `Bearer ${token}`;
-    const res = await fetch(url, { headers });
+    const res = await fetch(url, {
+      headers,
+      signal: options?.signal,
+      cache: 'no-store',
+    });
     if (!res.ok) throw new Error(`Snapshot request failed (${res.status})`);
     return res.blob();
   }
