@@ -35,12 +35,17 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
   const [streamMode, setStreamMode] = useState<'webrtc' | 'mjpeg' | 'snapshot'>('webrtc');
   const [mjpegUrl, setMjpegUrl] = useState<string>('');
   const [snapshotUrl, setSnapshotUrl] = useState<string>('');
+  const [hasLoadedFrame, setHasLoadedFrame] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [streamError, setStreamError] = useState<boolean>(false);
+  const [retryNonce, setRetryNonce] = useState<number>(0);
 
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const signalingWsRef = useRef<WebSocket | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const snapshotPollTimerRef = useRef<number | null>(null);
+  const mjpegTimeoutRef = useRef<number | null>(null);
+  const snapshotErrorsRef = useRef<number>(0);
 
   // Sync with global commands (Timed Preview, Stream All, Pause All)
   useEffect(() => {
@@ -86,11 +91,19 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
       }
       videoRef.current.srcObject = null;
     }
+    if (mjpegTimeoutRef.current) {
+      clearTimeout(mjpegTimeoutRef.current);
+      mjpegTimeoutRef.current = null;
+    }
     if (snapshotPollTimerRef.current) {
       clearInterval(snapshotPollTimerRef.current);
       snapshotPollTimerRef.current = null;
     }
+    snapshotErrorsRef.current = 0;
+    setHasLoadedFrame(false);
+    setStreamError(false);
     setMjpegUrl('');
+    setSnapshotUrl('');
     setIsLoading(false);
   };
 
@@ -105,8 +118,14 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
 
     const startSnapshotFallback = () => {
       if (isCancelled) return;
+      if (mjpegTimeoutRef.current) {
+        clearTimeout(mjpegTimeoutRef.current);
+        mjpegTimeoutRef.current = null;
+      }
+      snapshotErrorsRef.current = 0;
+      setMjpegUrl('');
+      setStreamError(false);
       setStreamMode('snapshot');
-      setIsLoading(false);
       setSnapshotUrl(api.getSnapshotUrl(printer.contextId || undefined, Date.now()));
 
       if (snapshotPollTimerRef.current) clearInterval(snapshotPollTimerRef.current);
@@ -115,6 +134,23 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
           setSnapshotUrl(api.getSnapshotUrl(printer.contextId || undefined, Date.now()));
         }
       }, 1500);
+    };
+
+    const beginMjpegStream = (streamName: string) => {
+      if (isCancelled) return;
+      if (mjpegTimeoutRef.current) {
+        clearTimeout(mjpegTimeoutRef.current);
+      }
+      setStreamError(false);
+      setHasLoadedFrame(false);
+      setMjpegUrl(api.getStreamMjpegUrl(streamName));
+      setStreamMode('mjpeg');
+      mjpegTimeoutRef.current = window.setTimeout(() => {
+        mjpegTimeoutRef.current = null;
+        if (!isCancelled) {
+          startSnapshotFallback();
+        }
+      }, 4500);
     };
 
     const startCardStream = async () => {
@@ -133,9 +169,7 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
         // 1. Direct MJPEG mode (e.g. Creator 5 Pro, Bambu Bridge, Adventurer 5M MJPEG)
         if (config.mode === 'mjpeg' || config.streamType === 'mjpeg') {
           const streamName = config.streamName || `printer_${printer.contextId || ''}`;
-          setMjpegUrl(api.getStreamMjpegUrl(streamName));
-          setStreamMode('mjpeg');
-          setIsLoading(false);
+          beginMjpegStream(streamName);
           return;
         }
 
@@ -155,8 +189,10 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
             if (isCancelled) return;
             if (videoRef.current && event.streams[0]) {
               videoRef.current.srcObject = event.streams[0];
+              setHasLoadedFrame(true);
               setStreamMode('webrtc');
               setIsLoading(false);
+              setStreamError(false);
             }
           };
 
@@ -189,9 +225,7 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
                 console.warn('[FleetPrinterCard] WebRTC error from go2rtc:', data.value);
                 // Codecs not matched or WebRTC unsupported for stream -> fallback to MJPEG
                 if (config.streamName) {
-                  setMjpegUrl(api.getStreamMjpegUrl(config.streamName));
-                  setStreamMode('mjpeg');
-                  setIsLoading(false);
+                  beginMjpegStream(config.streamName);
                 } else {
                   startSnapshotFallback();
                 }
@@ -210,9 +244,7 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
           ws.onerror = () => {
             if (isCancelled) return;
             if (config.streamName) {
-              setMjpegUrl(api.getStreamMjpegUrl(config.streamName));
-              setStreamMode('mjpeg');
-              setIsLoading(false);
+              beginMjpegStream(config.streamName);
             } else {
               startSnapshotFallback();
             }
@@ -223,9 +255,7 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
             if (isCancelled) return;
             if (pc.iceConnectionState !== 'connected' && pc.iceConnectionState !== 'completed') {
               if (config.streamName) {
-                setMjpegUrl(api.getStreamMjpegUrl(config.streamName));
-                setStreamMode('mjpeg');
-                setIsLoading(false);
+                beginMjpegStream(config.streamName);
               } else {
                 startSnapshotFallback();
               }
@@ -234,9 +264,7 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
         } catch {
           if (isCancelled) return;
           if (config.streamName) {
-            setMjpegUrl(api.getStreamMjpegUrl(config.streamName));
-            setStreamMode('mjpeg');
-            setIsLoading(false);
+            beginMjpegStream(config.streamName);
           } else {
             startSnapshotFallback();
           }
@@ -254,7 +282,7 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
       isCancelled = true;
       teardownConnections();
     };
-  }, [camerasVisible, isStreaming, printer.contextId, printer.isConnected, printer.hasCamera]);
+  }, [camerasVisible, isStreaming, printer.contextId, printer.isConnected, printer.hasCamera, retryNonce]);
 
   // Telemetry extraction with safe fallback cascades
   const rawStatus = printer.status;
@@ -327,28 +355,81 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
               <img
                 src={mjpegUrl}
                 alt="Live Camera Feed"
-                className="w-full h-full object-contain bg-black"
-                onLoad={() => setIsLoading(false)}
+                className={`w-full h-full object-contain bg-black ${hasLoadedFrame ? 'opacity-100' : 'opacity-0'}`}
+                onLoad={() => {
+                  if (mjpegTimeoutRef.current) {
+                    clearTimeout(mjpegTimeoutRef.current);
+                    mjpegTimeoutRef.current = null;
+                  }
+                  snapshotErrorsRef.current = 0;
+                  setHasLoadedFrame(true);
+                  setIsLoading(false);
+                  setStreamError(false);
+                }}
                 onError={() => {
+                  if (mjpegTimeoutRef.current) {
+                    clearTimeout(mjpegTimeoutRef.current);
+                    mjpegTimeoutRef.current = null;
+                  }
                   console.warn('[FleetPrinterCard] MJPEG stream failed, falling back to snapshot');
+                  snapshotErrorsRef.current = 0;
+                  setMjpegUrl('');
                   setStreamMode('snapshot');
                   setSnapshotUrl(api.getSnapshotUrl(printer.contextId || undefined, Date.now()));
+                  if (snapshotPollTimerRef.current) clearInterval(snapshotPollTimerRef.current);
+                  snapshotPollTimerRef.current = window.setInterval(() => {
+                    setSnapshotUrl(api.getSnapshotUrl(printer.contextId || undefined, Date.now()));
+                  }, 1500);
                 }}
               />
             )}
 
             {/* 3. Snapshot Polling Fallback */}
-            {streamMode === 'snapshot' && snapshotUrl && (
+            {streamMode === 'snapshot' && snapshotUrl && !streamError && (
               <img
                 src={snapshotUrl}
                 alt="Camera Snapshot"
-                className="w-full h-full object-contain bg-black"
-                onLoad={() => setIsLoading(false)}
+                className={`w-full h-full object-contain bg-black ${hasLoadedFrame ? 'opacity-100' : 'opacity-0'}`}
+                onLoad={() => {
+                  snapshotErrorsRef.current = 0;
+                  setHasLoadedFrame(true);
+                  setIsLoading(false);
+                  setStreamError(false);
+                }}
+                onError={() => {
+                  snapshotErrorsRef.current += 1;
+                  if (snapshotErrorsRef.current >= 2) {
+                    if (snapshotPollTimerRef.current) {
+                      clearInterval(snapshotPollTimerRef.current);
+                      snapshotPollTimerRef.current = null;
+                    }
+                    setIsLoading(false);
+                    setStreamError(true);
+                  }
+                }}
               />
             )}
 
+            {/* Stream Unavailable Overlay */}
+            {streamError && !isLoading && (
+              <div className="absolute inset-0 bg-black/85 flex flex-col items-center justify-center gap-1.5 p-3 text-center z-10 select-none">
+                <VideoOff size={18} className="text-[#EF4444]" />
+                <span className="text-xs font-semibold text-[#F3F4F6]">Camera Unavailable</span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setRetryNonce((prev) => prev + 1);
+                  }}
+                  className="mt-0.5 flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#00AE42] hover:bg-[#009638] text-[11px] font-semibold text-white cursor-pointer"
+                >
+                  <RefreshCw size={11} />
+                  <span>Retry</span>
+                </button>
+              </div>
+            )}
+
             {/* Loading Spinner Overlay */}
-            {isLoading && (
+            {isLoading && !streamError && (
               <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-1.5 z-10 select-none">
                 <RefreshCw size={20} className="text-[#00AE42] animate-spin" />
                 <span className="text-[11px] text-[#94A3B8]">Connecting stream...</span>
@@ -356,7 +437,7 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
             )}
 
             {/* LIVE Badge */}
-            {!isLoading && (
+            {!isLoading && hasLoadedFrame && !streamError && (
               <div className="absolute top-2 left-2 flex items-center gap-1.5 bg-black/75 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] font-semibold text-white select-none z-10">
                 <span className="w-2 h-2 rounded-full bg-[#00AE42] animate-pulse shadow-[0_0_6px_#00AE42]" />
                 <span>LIVE</span>
@@ -379,17 +460,6 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
           </>
         ) : (
           <div className="relative w-full h-full bg-[#161616] flex flex-col items-center justify-center gap-1.5 p-3 select-none overflow-hidden">
-            {/* Optional background snapshot image for standby preview */}
-            {printer.contextId && (
-              <img
-                src={api.getSnapshotUrl(printer.contextId)}
-                alt=""
-                className="absolute inset-0 w-full h-full object-cover opacity-25 filter blur-[1px] pointer-events-none"
-                onError={(e) => {
-                  (e.target as HTMLElement).style.display = 'none';
-                }}
-              />
-            )}
             <div className="relative z-10 p-2 rounded-full bg-[#222222]/90 text-[#94A3B8] border border-[#2E2E2E] shadow-sm">
               <Video size={isSmall ? 15 : 18} />
             </div>

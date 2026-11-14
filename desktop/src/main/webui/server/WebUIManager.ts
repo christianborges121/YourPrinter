@@ -216,6 +216,18 @@ export class WebUIManager extends EventEmitter {
       if (!targetPath.startsWith('/api') && !targetPath.startsWith('/static')) {
         targetPath = `/api${targetPath.startsWith('/') ? '' : '/'}${targetPath}`;
       }
+      const isMediaStream = /^\/(?:api\/)?(?:stream\.mjpeg|frame\.jpeg)\b/i.test(targetPath);
+      const firstByteTimeoutMs = isMediaStream ? 5000 : 10000;
+      let timedOut = false;
+      let firstByteTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const clearFirstByteTimer = () => {
+        if (firstByteTimer) {
+          clearTimeout(firstByteTimer);
+          firstByteTimer = null;
+        }
+      };
+
       const proxyReq = http.request(
         {
           hostname: '127.0.0.1',
@@ -228,14 +240,69 @@ export class WebUIManager extends EventEmitter {
           },
         },
         (proxyRes) => {
-          res.writeHead(proxyRes.statusCode || 500, {
-            ...proxyRes.headers,
-            'x-accel-buffering': 'no',
+          const statusCode = proxyRes.statusCode || 500;
+          if (!isMediaStream || statusCode !== 200) {
+            clearFirstByteTimer();
+            if (!res.headersSent && !res.writableEnded) {
+              res.writeHead(statusCode, {
+                ...proxyRes.headers,
+                'x-accel-buffering': 'no',
+              });
+            }
+            proxyRes.pipe(res);
+            return;
+          }
+
+          let headersForwarded = false;
+          const onFirstData = (chunk: Buffer) => {
+            if (!chunk || chunk.length === 0 || headersForwarded || timedOut) {
+              return;
+            }
+            headersForwarded = true;
+            clearFirstByteTimer();
+            proxyRes.pause();
+            proxyRes.off('data', onFirstData);
+            if (!res.headersSent && !res.writableEnded) {
+              res.writeHead(statusCode, {
+                ...proxyRes.headers,
+                'x-accel-buffering': 'no',
+              });
+              res.write(chunk);
+            }
+            proxyRes.pipe(res);
+            proxyRes.resume();
+          };
+
+          proxyRes.on('data', onFirstData);
+          proxyRes.once('end', () => {
+            clearFirstByteTimer();
+            if (!headersForwarded && !timedOut && !res.headersSent && !res.writableEnded) {
+              res.status(502).json({ error: 'Empty camera stream response' });
+            }
           });
-          proxyRes.pipe(res);
+          proxyRes.once('error', () => {
+            clearFirstByteTimer();
+            if (!res.headersSent && !res.writableEnded) {
+              res.status(502).json({ error: 'go2rtc upstream stream error' });
+            }
+          });
         }
       );
+
+      firstByteTimer = setTimeout(() => {
+        timedOut = true;
+        firstByteTimer = null;
+        proxyReq.destroy();
+        if (!res.headersSent && !res.writableEnded) {
+          res.status(504).json({ error: 'go2rtc stream timeout' });
+        }
+      }, firstByteTimeoutMs);
+
       proxyReq.on('error', (err) => {
+        clearFirstByteTimer();
+        if (timedOut) {
+          return;
+        }
         if (!res.headersSent && !res.writableEnded) {
           res.status(502).json({ error: 'go2rtc proxy error', message: err.message });
         }
@@ -243,6 +310,7 @@ export class WebUIManager extends EventEmitter {
 
       // Tear down proxy request immediately when client disconnects before response completes
       res.on('close', () => {
+        clearFirstByteTimer();
         if (!res.writableEnded) {
           proxyReq.destroy();
         }

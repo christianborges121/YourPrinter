@@ -49,6 +49,8 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
   protected lastFiltrationMode: 'external' | 'internal' | 'none' = 'none';
   private lastFallbackCameraProbeAt = 0;
   private consecutiveMissingOemCameraPolls = 0;
+  private lastTurnCameraOnAt = 0;
+  private lastCameraResetAt = 0;
 
   /**
    * Cache for last known filament usage data while printing
@@ -1870,19 +1872,7 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
     }
   }
 
-  /**
-   * Ensure printer camera stream is active (streamCtrl_cmd open)
-   */
-  public async turnCameraOn(): Promise<boolean> {
-    try {
-      if (typeof (this.fiveMClient.control as unknown as { turnCameraOn?: () => Promise<boolean> })?.turnCameraOn === 'function') {
-        const ok = await (this.fiveMClient.control as unknown as { turnCameraOn: () => Promise<boolean> }).turnCameraOn();
-        if (ok) return true;
-      }
-    } catch {
-      // Fall through to HTTP command
-    }
-
+  private async sendStreamCtrlAction(action: 'open' | 'close', timeoutMs: number): Promise<boolean> {
     try {
       const details = this.printerDetails as Record<string, any> | undefined;
       const serialNumber =
@@ -1908,7 +1898,7 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
         return false;
       }
 
-      console.log(`[DualAPIBackend] Sending streamCtrl_cmd open to http://${ip}:8898/control`);
+      console.log(`[DualAPIBackend] Sending streamCtrl_cmd ${action} to http://${ip}:8898/control`);
       const res = await fetch(`http://${ip}:8898/control`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1917,18 +1907,54 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
           checkCode,
           payload: {
             cmd: 'streamCtrl_cmd',
-            args: { action: 'open' },
+            args: { action },
           },
         }),
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.timeout(timeoutMs),
       });
       const data = (await res.json()) as { code?: number };
-      console.log(`[DualAPIBackend] streamCtrl_cmd response:`, data);
+      console.log(`[DualAPIBackend] streamCtrl_cmd ${action} response:`, data);
       return data?.code === 0;
     } catch (error) {
-      console.warn('[DualAPIBackend] Failed to turn camera on:', error);
+      console.warn(`[DualAPIBackend] Failed to send streamCtrl_cmd ${action}:`, error);
       return false;
     }
+  }
+
+  /**
+   * Ensure printer camera stream is active (streamCtrl_cmd open)
+   */
+  public async turnCameraOn(): Promise<boolean> {
+    if (this.oemCameraStreamUrl.trim() !== '' && Date.now() - this.lastTurnCameraOnAt < 15000) {
+      return true;
+    }
+    this.lastTurnCameraOnAt = Date.now();
+
+    try {
+      if (typeof (this.fiveMClient.control as unknown as { turnCameraOn?: () => Promise<boolean> })?.turnCameraOn === 'function') {
+        const ok = await (this.fiveMClient.control as unknown as { turnCameraOn: () => Promise<boolean> }).turnCameraOn();
+        if (ok) return true;
+      }
+    } catch {
+      // Fall through to HTTP command
+    }
+
+    return this.sendStreamCtrlAction('open', 3000);
+  }
+
+  /**
+   * Close and reopen the printer's internal camera stream to recover from a wedged daemon.
+   */
+  public async resetCameraStream(): Promise<boolean> {
+    if (Date.now() - this.lastCameraResetAt < 20000) {
+      return false;
+    }
+    this.lastCameraResetAt = Date.now();
+
+    await this.sendStreamCtrlAction('close', 2500);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    this.lastTurnCameraOnAt = 0;
+    return this.turnCameraOn();
   }
 
   /**
@@ -1940,6 +1966,8 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
     this.lastFilamentUsageCache = null;
     this.lastFallbackCameraProbeAt = 0;
     this.consecutiveMissingOemCameraPolls = 0;
+    this.lastTurnCameraOnAt = 0;
+    this.lastCameraResetAt = 0;
 
     // Call parent dispose to clean up clients
     await super.dispose();

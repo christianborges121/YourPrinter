@@ -239,7 +239,7 @@ export function registerCameraRoutes(router: Router, deps: RouteDependencies): v
             backend,
           });
 
-          const snapshot = await go2rtcService.captureSnapshot(contextId, 4000);
+          const snapshot = await go2rtcService.captureSnapshot(contextId, 3500);
           if (snapshot && snapshot.bytes && snapshot.bytes.length > 0) {
             return {
               bytes: Buffer.from(snapshot.bytes),
@@ -298,6 +298,29 @@ export function registerCameraRoutes(router: Router, deps: RouteDependencies): v
               }
             } catch {
               // Try next candidate
+            }
+          }
+
+          // Fallback 3: attempt throttled camera daemon reset + go2rtc stream restart if stream appears wedged
+          const resetBackend = backend as { resetCameraStream?: () => Promise<boolean> };
+          if (typeof resetBackend.resetCameraStream === 'function') {
+            try {
+              const resetOk = await resetBackend.resetCameraStream();
+              if (resetOk) {
+                if (typeof go2rtcService.restartStream === 'function') {
+                  await go2rtcService.restartStream(contextId).catch(() => {});
+                }
+                await new Promise((resolve) => setTimeout(resolve, 300));
+                const retrySnapshot = await go2rtcService.captureSnapshot(contextId, 3000);
+                if (retrySnapshot && retrySnapshot.bytes && retrySnapshot.bytes.length > 0) {
+                  return {
+                    bytes: Buffer.from(retrySnapshot.bytes),
+                    contentType: retrySnapshot.contentType || 'image/jpeg',
+                  };
+                }
+              }
+            } catch (err) {
+              console.warn('[camera-routes] resetCameraStream recovery failed:', err);
             }
           }
 

@@ -498,36 +498,69 @@ def capture_frame_from_stream(stream_url):
 
 def capture_printer_frame(tracker):
     """
-    Captures a frame for a specific printer:
-    1. First tries the WebUI snapshot proxy (/api/camera/snapshot?contextId=...)
-    2. Fallback: tries direct camera stream URL if known
+    Captures a frame for a specific printer without opening competing single-client MJPEG sockets:
+    1. Primary: public go2rtc frame endpoint (/api/go2rtc/api/frame.jpeg?src=printer_<contextId>)
+    2. Secondary: WebUI snapshot proxy (/api/camera/snapshot?contextId=...)
+    3. Fallback: discrete snapshot endpoints (never open :8080/?action=stream when WebUI is managing go2rtc)
     """
     context_id = tracker.get("context_id")
     printer_name = tracker.get("name", "Printer")
 
-    # 1. Primary: FlashForgeUI snapshot endpoint
+    # 1. Primary: shared go2rtc frame endpoint (public, no WebUI auth required)
+    if FLASHFORGE_UI_URL and context_id:
+        stream_name = f"printer_{context_id}"
+        go2rtc_frame_url = f"{FLASHFORGE_UI_URL}/api/go2rtc/api/frame.jpeg?src={urllib.parse.quote(stream_name)}"
+        try:
+            req = urllib.request.Request(go2rtc_frame_url, headers={"User-Agent": "Obico-Stream-Watchdog/2.0"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                if resp.status == 200:
+                    data = resp.read()
+                    if len(data) > 100 and data[:2] == b"\xff\xd8":
+                        return data
+        except Exception:
+            pass
+
+    # 2. Secondary: FlashForgeUI snapshot endpoint (triggers daemon recovery if wedged)
     if FLASHFORGE_UI_URL and context_id:
         url = f"{FLASHFORGE_UI_URL}/api/camera/snapshot?contextId={urllib.parse.quote(context_id)}"
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "Obico-Stream-Watchdog/2.0"})
-            with urllib.request.urlopen(req, timeout=6) as resp:
+            with urllib.request.urlopen(req, timeout=5) as resp:
                 if resp.status == 200:
                     data = resp.read()
                     if len(data) > 100:
                         return data
-        except Exception as e:
-            # Fallback will attempt direct streaming
+        except Exception:
             pass
 
-    # 2. Fallback: direct camera stream URL
-    cam_url = tracker.get("camera_url")
-    if not cam_url and tracker.get("ip"):
-        cam_url = f"http://{tracker['ip']}:8080/?action=stream"
-    if not cam_url and (tracker.get("id") == "default" or not context_id):
-        cam_url = CAMERA_STREAM_URL
-
-    if cam_url:
+    # 3. Fallback: discrete snapshot queries; avoid competing with go2rtc on :8080/?action=stream when WebUI is configured
+    cam_url = tracker.get("camera_url") or ""
+    if cam_url and ":8080/?action=stream" not in cam_url:
         return capture_frame_from_stream(cam_url)
+
+    ip = tracker.get("ip")
+    if ip:
+        for snap_url in (
+            f"http://{ip}:8080/?action=snapshot",
+            f"http://{ip}/webcam/?action=snapshot",
+            f"http://{ip}:8080/snapshot",
+        ):
+            try:
+                req = urllib.request.Request(snap_url, headers={"User-Agent": "Obico-Stream-Watchdog/2.0"})
+                with urllib.request.urlopen(req, timeout=2) as resp:
+                    if resp.status == 200:
+                        data = resp.read()
+                        if len(data) > 100 and data[:2] == b"\xff\xd8":
+                            return data
+            except Exception:
+                pass
+
+    if not FLASHFORGE_UI_URL:
+        fallback_stream = cam_url or (f"http://{ip}:8080/?action=stream" if ip else "")
+        if not fallback_stream and (tracker.get("id") == "default" or not context_id):
+            fallback_stream = CAMERA_STREAM_URL
+        if fallback_stream:
+            return capture_frame_from_stream(fallback_stream)
 
     print(f"[-] No valid camera source reachable for {printer_name}", flush=True)
     return None
