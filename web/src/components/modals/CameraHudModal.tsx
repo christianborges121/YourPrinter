@@ -65,11 +65,11 @@ export const CameraHudModal: React.FC<CameraHudModalProps> = ({ isOpen, onClose 
       pollIntervalRef.current = window.setInterval(updateSnapshot, 1000);
     };
 
-    api.getCameraProxyConfig(activeContext?.contextId).then((config) => {
+    api.getCameraProxyConfig(activeContext?.contextId, { reset: retryNonce > 0 }).then((config) => {
       if (isCancelled) return;
       if (config.success && config.streamName) {
         modeRef.current = 'mjpeg';
-        setStreamUrl(api.getStreamMjpegUrl(config.streamName));
+        setStreamUrl(api.getStreamMjpegUrl(config.streamName, Date.now()));
         mjpegTimeoutRef.current = window.setTimeout(() => {
           mjpegTimeoutRef.current = null;
           if (!isCancelled && modeRef.current === 'mjpeg') {

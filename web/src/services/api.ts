@@ -125,13 +125,21 @@ class ApiClient {
   }
 
   // Camera
-  async getCameraProxyConfig(contextId?: string): Promise<CameraProxyConfig> {
-    return this.request('/api/camera/proxy-config', {}, { contextId });
+  async getCameraProxyConfig(contextId?: string, options?: { reset?: boolean }): Promise<CameraProxyConfig> {
+    return this.request(
+      '/api/camera/proxy-config',
+      {},
+      {
+        contextId,
+        reset: options?.reset ? 1 : undefined,
+      }
+    );
   }
 
-  getStreamMjpegUrl(streamName: string): string {
+  getStreamMjpegUrl(streamName: string, cacheBuster?: number): string {
     const baseUrl = getServerUrl();
-    return `${baseUrl}/api/go2rtc/api/stream.mjpeg?src=${encodeURIComponent(streamName)}`;
+    const suffix = cacheBuster ? `&_t=${cacheBuster}` : '';
+    return `${baseUrl}/api/go2rtc/api/stream.mjpeg?src=${encodeURIComponent(streamName)}${suffix}`;
   }
 
   getSnapshotUrl(contextId?: string, cacheBuster?: number): string {

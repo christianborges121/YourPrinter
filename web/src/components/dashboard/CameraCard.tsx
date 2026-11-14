@@ -77,6 +77,7 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
   const consecutiveSnapshotErrorsRef = useRef<number>(0);
   const hasLoadedFrameRef = useRef<boolean>(false);
   const streamSessionRef = useRef<number>(0);
+  const forceResetRef = useRef<boolean>(false);
 
   const clearMjpegTimers = () => {
     if (mjpegRetryTimerRef.current) {
@@ -316,15 +317,20 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
     clearMjpegTimers();
     if (mjpegRetryCountRef.current < MAX_MJPEG_RETRIES && streamName) {
       mjpegRetryCountRef.current += 1;
+      const attempt = mjpegRetryCountRef.current;
       console.warn(
-        `[CameraCard] MJPEG stream interrupted, retrying (${mjpegRetryCountRef.current}/${MAX_MJPEG_RETRIES})...`
+        `[CameraCard] MJPEG stream interrupted, retrying (${attempt}/${MAX_MJPEG_RETRIES})...`
       );
       if (!hasLoadedFrameRef.current) {
         setIsLoading(true);
       }
-      mjpegRetryTimerRef.current = window.setTimeout(() => {
+      mjpegRetryTimerRef.current = window.setTimeout(async () => {
         if (streamSessionRef.current !== sessionId) return;
-        setMjpegUrl(`${api.getStreamMjpegUrl(streamName)}&_r=${Date.now()}`);
+        if (attempt === 1) {
+          await api.getCameraProxyConfig(targetContextId, { reset: true }).catch(() => {});
+          if (streamSessionRef.current !== sessionId) return;
+        }
+        setMjpegUrl(api.getStreamMjpegUrl(streamName, Date.now()));
         if (!hasLoadedFrameRef.current) {
           armMjpegLoadTimeout(streamName, sessionId, targetContextId);
         }
@@ -345,7 +351,7 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
     clearMjpegTimers();
     mjpegRetryCountRef.current = 0;
     setMjpegStreamName(streamName);
-    setMjpegUrl(api.getStreamMjpegUrl(streamName));
+    setMjpegUrl(api.getStreamMjpegUrl(streamName, Date.now()));
     setStreamMode('mjpeg');
     if (!hasLoadedFrameRef.current) {
       setIsLoading(true);
@@ -380,8 +386,11 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
     setErrorMsg(null);
     setCountdown(30);
 
+    const shouldReset = forceResetRef.current;
+    forceResetRef.current = false;
+
     try {
-      const config = await api.getCameraProxyConfig(targetContextId);
+      const config = await api.getCameraProxyConfig(targetContextId, { reset: shouldReset });
       if (isStale()) return;
 
       if (!config.success) {
@@ -544,6 +553,7 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
   };
 
   const handleRestartStream = () => {
+    forceResetRef.current = true;
     setErrorMsg(null);
     setCountdown(30);
     setIsPlaying(true);

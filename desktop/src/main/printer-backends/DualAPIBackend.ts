@@ -1945,8 +1945,9 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
   /**
    * Close and reopen the printer's internal camera stream to recover from a wedged daemon.
    */
-  public async resetCameraStream(): Promise<boolean> {
-    if (Date.now() - this.lastCameraResetAt < 20000) {
+  public async resetCameraStream(force = false): Promise<boolean> {
+    const cooldownMs = force ? 3000 : 20000;
+    if (Date.now() - this.lastCameraResetAt < cooldownMs) {
       return false;
     }
     this.lastCameraResetAt = Date.now();

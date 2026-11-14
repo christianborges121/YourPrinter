@@ -143,7 +143,7 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
       }
       setStreamError(false);
       setHasLoadedFrame(false);
-      setMjpegUrl(api.getStreamMjpegUrl(streamName));
+      setMjpegUrl(api.getStreamMjpegUrl(streamName, Date.now()));
       setStreamMode('mjpeg');
       mjpegTimeoutRef.current = window.setTimeout(() => {
         mjpegTimeoutRef.current = null;
@@ -158,7 +158,9 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
       setIsLoading(true);
 
       try {
-        const config = await api.getCameraProxyConfig(printer.contextId || undefined);
+        const config = await api.getCameraProxyConfig(printer.contextId || undefined, {
+          reset: retryNonce > 0,
+        });
         if (isCancelled) return;
 
         if (!config.success) {

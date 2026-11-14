@@ -138,14 +138,31 @@ export function registerCameraRoutes(router: Router, deps: RouteDependencies): v
         (backend as any)?.ipAddress ||
         '';
 
-      await awaitBoundedTurnCameraOn(backend);
+      const go2rtcService = getGo2rtcService();
+      const shouldReset = req.query.reset === '1' || req.query.reset === 'true';
+
+      if (shouldReset) {
+        await go2rtcService.removeStream(contextId).catch(() => {});
+        const resetBackend = backend as { resetCameraStream?: (force?: boolean) => Promise<boolean> };
+        if (typeof resetBackend.resetCameraStream === 'function') {
+          await resetBackend.resetCameraStream(true).catch((err) => {
+            console.warn('[camera-routes] Explicit resetCameraStream failed:', err);
+            return false;
+          });
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        } else {
+          await awaitBoundedTurnCameraOn(backend);
+        }
+      } else {
+        await awaitBoundedTurnCameraOn(backend);
+      }
 
       const ensuredStream = await resolveAndEnsureCameraStream({
         contextId,
         printerIpAddress: ip,
         printerFeatures: backend.getBackendStatus().features,
         userConfig: getCameraUserConfig(contextId),
-        go2rtcService: getGo2rtcService(),
+        go2rtcService,
         backend,
       });
 
@@ -302,15 +319,21 @@ export function registerCameraRoutes(router: Router, deps: RouteDependencies): v
           }
 
           // Fallback 3: attempt throttled camera daemon reset + go2rtc stream restart if stream appears wedged
-          const resetBackend = backend as { resetCameraStream?: () => Promise<boolean> };
+          const resetBackend = backend as { resetCameraStream?: (force?: boolean) => Promise<boolean> };
           if (typeof resetBackend.resetCameraStream === 'function') {
             try {
-              const resetOk = await resetBackend.resetCameraStream();
+              await go2rtcService.removeStream(contextId).catch(() => {});
+              const resetOk = await resetBackend.resetCameraStream(false);
+              await new Promise((resolve) => setTimeout(resolve, 250));
+              await resolveAndEnsureCameraStream({
+                contextId,
+                printerIpAddress: ip,
+                printerFeatures: backend.getBackendStatus().features,
+                userConfig: getCameraUserConfig(contextId),
+                go2rtcService,
+                backend,
+              });
               if (resetOk) {
-                if (typeof go2rtcService.restartStream === 'function') {
-                  await go2rtcService.restartStream(contextId).catch(() => {});
-                }
-                await new Promise((resolve) => setTimeout(resolve, 300));
                 const retrySnapshot = await go2rtcService.captureSnapshot(contextId, 3000);
                 if (retrySnapshot && retrySnapshot.bytes && retrySnapshot.bytes.length > 0) {
                   return {
