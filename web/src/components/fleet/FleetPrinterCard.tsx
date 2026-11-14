@@ -150,7 +150,7 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
         if (!isCancelled) {
           startSnapshotFallback();
         }
-      }, 4500);
+      }, 6000);
     };
 
     const startCardStream = async () => {

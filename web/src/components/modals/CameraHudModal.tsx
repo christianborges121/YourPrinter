@@ -75,7 +75,7 @@ export const CameraHudModal: React.FC<CameraHudModalProps> = ({ isOpen, onClose 
           if (!isCancelled && modeRef.current === 'mjpeg') {
             startSnapshotMode();
           }
-        }, 4500);
+        }, 6000);
       } else {
         startSnapshotMode();
       }

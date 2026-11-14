@@ -1939,7 +1939,7 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
       // Fall through to HTTP command
     }
 
-    return this.sendStreamCtrlAction('open', 3000);
+    return this.sendStreamCtrlAction('open', 6000);
   }
 
   /**
@@ -1952,10 +1952,10 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
     }
     this.lastCameraResetAt = Date.now();
 
-    await this.sendStreamCtrlAction('close', 2500);
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    this.lastTurnCameraOnAt = 0;
-    return this.turnCameraOn();
+    await this.sendStreamCtrlAction('close', 3000);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    this.lastTurnCameraOnAt = Date.now();
+    return this.sendStreamCtrlAction('open', 6000);
   }
 
   /**

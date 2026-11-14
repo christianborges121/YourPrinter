@@ -22,7 +22,7 @@ interface SnapshotPayload {
 }
 
 const SNAPSHOT_DEDUPE_CACHE_MS = 400;
-const TURN_CAMERA_ON_TIMEOUT_MS = 1200;
+const TURN_CAMERA_ON_TIMEOUT_MS = 3500;
 
 function isMjpegStreamUrl(url: string): boolean {
   return /\?action=stream\b|\/stream(?:\.mjpeg)?(?:$|\?)/i.test(url);
@@ -318,35 +318,8 @@ export function registerCameraRoutes(router: Router, deps: RouteDependencies): v
             }
           }
 
-          // Fallback 3: attempt throttled camera daemon reset + go2rtc stream restart if stream appears wedged
-          const resetBackend = backend as { resetCameraStream?: (force?: boolean) => Promise<boolean> };
-          if (typeof resetBackend.resetCameraStream === 'function') {
-            try {
-              await go2rtcService.removeStream(contextId).catch(() => {});
-              const resetOk = await resetBackend.resetCameraStream(false);
-              await new Promise((resolve) => setTimeout(resolve, 250));
-              await resolveAndEnsureCameraStream({
-                contextId,
-                printerIpAddress: ip,
-                printerFeatures: backend.getBackendStatus().features,
-                userConfig: getCameraUserConfig(contextId),
-                go2rtcService,
-                backend,
-              });
-              if (resetOk) {
-                const retrySnapshot = await go2rtcService.captureSnapshot(contextId, 3000);
-                if (retrySnapshot && retrySnapshot.bytes && retrySnapshot.bytes.length > 0) {
-                  return {
-                    bytes: Buffer.from(retrySnapshot.bytes),
-                    contentType: retrySnapshot.contentType || 'image/jpeg',
-                  };
-                }
-              }
-            } catch (err) {
-              console.warn('[camera-routes] resetCameraStream recovery failed:', err);
-            }
-          }
-
+          // Do not run streamCtrl_cmd close/open during background snapshot polling;
+          // explicit user stream resets are triggered via GET /api/camera/proxy-config?reset=1.
           return null;
         })().finally(() => {
           inFlightSnapshots.delete(contextId);
