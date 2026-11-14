@@ -31,6 +31,7 @@ import {
   safeExtractNumber,
   safeExtractString,
 } from '../utils/extraction.utils.js';
+import { extractErrorInfoFromRecords, extractLedStateFromRecords } from '../utils/printer-error.utils.js';
 
 /**
  * Maps printer states from backend to UI-friendly states
@@ -111,8 +112,15 @@ export class PrinterDataTransformer {
     const cumulativePrintTime = safeExtractNumber(backendData, 'cumulativePrintTime', 0);
     const cumulativeFilament = safeExtractNumber(backendData, 'cumulativeFilament', 0);
 
+    // Extract error details and light state if present
+    const { errorCode, errorMessage } = extractErrorInfoFromRecords(backendData);
+    const ledState = extractLedStateFromRecords(backendData);
+
     const finalStatus = {
       state,
+      ...(errorCode ? { errorCode } : {}),
+      ...(errorMessage ? { errorMessage } : {}),
+      ...(ledState !== undefined ? { ledState } : {}),
       temperatures: {
         bed: {
           current: bedTemp,

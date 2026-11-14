@@ -269,7 +269,13 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
     : 'Offline';
 
   const isPrinting = /print|busy|running/i.test(rawState);
-  const isCompleted = /complete|finish/i.test(rawState);
+  const isError = /error|fail/i.test(rawState) || Boolean(rawStatus?.errorCode || rawStatus?.errorMessage);
+  const isCompleted = !isError && /complete|finish/i.test(rawState);
+  const errorSummary = rawStatus?.errorCode
+    ? rawStatus.errorMessage
+      ? `${rawStatus.errorCode}: ${rawStatus.errorMessage}`
+      : rawStatus.errorCode
+    : rawStatus?.errorMessage || null;
 
   const rawProgress = rawStatus?.progress ?? printer.progress ?? 0;
   const progress = isCompleted
@@ -469,17 +475,23 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
 
           {/* Slot 2: Progress Track */}
           <div className="w-full bg-[#262626] h-1.5 rounded-full overflow-hidden my-0.5">
-            {hasJob ? (
+            {hasJob || isError ? (
               <div
-                className="h-full bg-[#00AE42] rounded-full transition-all duration-300"
-                style={{ width: `${Math.min(Math.max(progress, 0), 100)}%` }}
+                className={`h-full rounded-full transition-all duration-300 ${isError ? 'bg-[#EF4444]' : 'bg-[#00AE42]'}`}
+                style={{ width: `${isError && !hasJob ? 100 : Math.min(Math.max(progress, 0), 100)}%` }}
               />
             ) : null}
           </div>
 
           {/* Slot 3: Layer / ETA / Detail */}
-          <div className="flex items-center justify-between text-[11px] text-[#94A3B8] h-4">
-            <span>{hasJob ? layerText : 'No active print job'}</span>
+          <div className="flex items-center justify-between text-[11px] text-[#94A3B8] h-4 gap-2">
+            {isError && errorSummary ? (
+              <span className="text-[#EF4444] font-medium truncate" title={errorSummary}>
+                {errorSummary}
+              </span>
+            ) : (
+              <span>{hasJob ? layerText : 'No active print job'}</span>
+            )}
             <span>{hasJob && etaText ? etaText : '—'}</span>
           </div>
         </div>
@@ -563,17 +575,23 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
 
           {/* Slot 2: Progress Track */}
           <div className="w-full bg-[#262626] h-1.5 rounded-full overflow-hidden my-0.5">
-            {hasJob ? (
+            {hasJob || isError ? (
               <div
-                className="h-full bg-[#00AE42] rounded-full transition-all duration-300"
-                style={{ width: `${Math.min(Math.max(progress, 0), 100)}%` }}
+                className={`h-full rounded-full transition-all duration-300 ${isError ? 'bg-[#EF4444]' : 'bg-[#00AE42]'}`}
+                style={{ width: `${isError && !hasJob ? 100 : Math.min(Math.max(progress, 0), 100)}%` }}
               />
             ) : null}
           </div>
 
           {/* Slot 3: Layer Info & ETA */}
-          <div className="flex items-center justify-between text-[11px] text-[#94A3B8] h-4">
-            <span>{hasJob ? layerText : 'No active print job'}</span>
+          <div className="flex items-center justify-between text-[11px] text-[#94A3B8] h-4 gap-2">
+            {isError && errorSummary ? (
+              <span className="text-[#EF4444] font-medium truncate" title={errorSummary}>
+                {errorSummary}
+              </span>
+            ) : (
+              <span>{hasJob ? layerText : 'No active print job'}</span>
+            )}
             <span>{hasJob && etaText ? etaText : '—'}</span>
           </div>
         </div>

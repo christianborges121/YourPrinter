@@ -28,6 +28,7 @@ import { getPrinterContextManager } from '../../managers/PrinterContextManager.j
 import type { SpoolmanChangedEvent } from '../../services/SpoolmanIntegrationService.js';
 import { getSpoolmanIntegrationService } from '../../services/SpoolmanIntegrationService.js';
 import { AppError, ErrorCode, toAppError } from '../../utils/error.utils.js';
+import { extractErrorInfoFromRecords, extractLedStateFromRecords } from '../../utils/printer-error.utils.js';
 import { createValidationError, WebSocketCommandSchema } from '../schemas/web-api.schemas.js';
 import { getAuthManager } from './AuthManager.js';
 import { getWebUIManager } from './WebUIManager.js';
@@ -531,14 +532,8 @@ export class WebSocketManager extends EventEmitter {
         ? (status.fans as { chamberFan: number }).chamberFan
         : undefined;
 
-    const ledState =
-      typeof (rawBackend as { ledState?: boolean })?.ledState === 'boolean'
-        ? (rawBackend as { ledState?: boolean }).ledState
-        : typeof (rawBackend as { led?: boolean })?.led === 'boolean'
-        ? (rawBackend as { led?: boolean }).led
-        : typeof (rawBackend as { lightStatus?: string })?.lightStatus === 'string'
-        ? (rawBackend as { lightStatus?: string }).lightStatus === 'open' || (rawBackend as { lightStatus?: string }).lightStatus === 'on'
-        : undefined;
+    const ledState = extractLedStateFromRecords(status, rawBackend);
+    const { errorCode, errorMessage } = extractErrorInfoFromRecords(status, rawBackend);
 
     const toolTemps = rawTools && rawTools.length > 0
       ? rawTools.map(t => Math.round(t.current || 0))
@@ -616,6 +611,8 @@ export class WebSocketManager extends EventEmitter {
     return {
       contextId: contextId || (data as unknown as { contextId?: string }).contextId || (status as unknown as { contextId?: string }).contextId || undefined,
       printerState: status.state, // Note: 'state' not 'printerState'
+      ...(errorCode ? { errorCode } : {}),
+      ...(errorMessage ? { errorMessage } : {}),
       bedTemperature: Math.round(bedTemp.current),
       bedTargetTemperature: Math.round(bedTemp.target),
       nozzleTemperature: Math.round(extruderTemp.current),

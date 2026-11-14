@@ -9,6 +9,7 @@ import { getPrinterDetailsManager } from '../../../managers/PrinterDetailsManage
 import { getPrinterAdapterRegistry } from '../../../printer-backends/adapters/index.js';
 import { getMultiContextPollingCoordinator } from '../../../services/MultiContextPollingCoordinator.js';
 import { toAppError } from '../../../utils/error.utils.js';
+import { extractErrorInfoFromRecords } from '../../../utils/printer-error.utils.js';
 import type { AuthenticatedRequest } from '../auth-middleware.js';
 import type { RouteDependencies } from './route-helpers.js';
 
@@ -239,9 +240,12 @@ export function registerContextRoutes(router: Router, deps: RouteDependencies): 
 
         const rawOverviewProg = rawStatus?.currentJob?.progress?.percentage ?? rawAny?.progress ?? 0;
         const normOverviewProg = rawOverviewProg > 0 && rawOverviewProg <= 1.0 ? rawOverviewProg * 100 : rawOverviewProg;
+        const { errorCode, errorMessage } = extractErrorInfoFromRecords(rawStatus, rawBackend);
         const statusSummary = rawStatus
           ? {
               printerState: rawStatus.state ?? (rawAny?.printerState || 'Ready'),
+              ...(errorCode ? { errorCode } : {}),
+              ...(errorMessage ? { errorMessage } : {}),
               bedTemperature: bedCurrent,
               bedTargetTemperature: bedTarget,
               nozzleTemperature: nozzleCurrent,

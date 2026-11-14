@@ -241,12 +241,11 @@ export class WebUIManager extends EventEmitter {
         }
       });
 
-      // Tear down proxy request immediately when client navigates away or disconnects
+      // Tear down proxy request immediately when client disconnects before response completes
       res.on('close', () => {
-        proxyReq.destroy();
-      });
-      req.on('close', () => {
-        proxyReq.destroy();
+        if (!res.writableEnded) {
+          proxyReq.destroy();
+        }
       });
 
       req.pipe(proxyReq);

@@ -33,6 +33,7 @@ import {
   StatusResult,
 } from '@shared/types/printer-backend/index.js';
 import { BasePrinterBackend } from './BasePrinterBackend.js';
+import { extractLedStateFromRecords, resolveFlashForgeError } from '../utils/printer-error.utils.js';
 
 /**
  * Abstract base class for dual-API printer backends
@@ -803,8 +804,46 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
         this.lastFilamentUsageCache = null;
       }
 
+      const isErrorState = /error|fail/i.test(effectiveStatus || status || '');
+      let ledState = extractLedStateFromRecords(machineInfo, raw);
+      let errorInfo = isErrorState
+        ? resolveFlashForgeError(
+            raw.errorCode ?? raw.ErrorCode ?? raw.errCode,
+            raw.errorMessage ?? raw.errorMsg ?? raw.ErrorMessage
+          )
+        : {};
+
+      // Query raw /detail if transformed machineInfo stripped lightStatus or errorCode
+      const infoClient = this.fiveMClient?.info as unknown as {
+        getDetailResponse?: () => Promise<{ detail?: Record<string, unknown> } | null>;
+      };
+      if (
+        typeof infoClient?.getDetailResponse === 'function' &&
+        (ledState === undefined || (isErrorState && !errorInfo.errorCode))
+      ) {
+        try {
+          const detailResponse = await infoClient.getDetailResponse();
+          const detail = detailResponse?.detail;
+          if (detail && typeof detail === 'object') {
+            if (ledState === undefined) {
+              ledState = extractLedStateFromRecords(detail);
+            }
+            if (isErrorState && !errorInfo.errorCode) {
+              errorInfo = resolveFlashForgeError(
+                detail.errorCode ?? detail.ErrorCode,
+                detail.errorMessage ?? detail.errorMsg ?? detail.message
+              );
+            }
+          }
+        } catch {
+          // Non-fatal: continue with already-parsed status fields
+        }
+      }
+
       const printerStatus = {
         printerState: effectiveStatus || status,
+        ...(isErrorState && errorInfo.errorCode ? { errorCode: errorInfo.errorCode } : {}),
+        ...(isErrorState && errorInfo.errorMessage ? { errorMessage: errorInfo.errorMessage } : {}),
         bedTemperature: bedCurrent,
         bedTargetTemperature: bedSet,
         nozzleTemperature: activeNozzleTemp,
@@ -857,12 +896,7 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
               ? 'internal'
               : this.lastFiltrationMode,
         },
-        ledState:
-          raw.lightStatus === 'open' ||
-          raw.lightStatus === 'on' ||
-          (machineInfo as any)?.LightStatus === 'open' ||
-          (machineInfo as any)?.lightStatus === 'open' ||
-          undefined,
+        ledState,
         // Allow subclasses to add additional fields
         ...this.getAdditionalStatusFields(machineInfo),
       };

@@ -172,6 +172,9 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
     transientGraceCount: number;
   } | null>(null);
 
+  // Brief optimistic guard so in-flight polls cannot snap ledState back immediately after toggling
+  const ledOverrideRef = useRef<{ value: boolean; expiresAt: number } | null>(null);
+
   const applyStatusWithStabilization = useCallback((rawIncoming: PrinterStatusData) => {
     let normProg = rawIncoming.progress;
     if (typeof normProg === 'number' && normProg > 0 && normProg <= 1.0) {
@@ -263,10 +266,21 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
           ? stabilized.chamberFanSpeed
           : prevStatus?.chamberFanSpeed;
 
-      const led =
-        stabilized.ledState !== undefined
-          ? stabilized.ledState
-          : prevStatus?.ledState;
+      let led: boolean | undefined;
+      const pendingLed = ledOverrideRef.current;
+      if (pendingLed && Date.now() < pendingLed.expiresAt) {
+        if (stabilized.ledState === pendingLed.value) {
+          ledOverrideRef.current = null;
+        }
+        led = pendingLed.value;
+      } else {
+        ledOverrideRef.current = null;
+        led = stabilized.ledState !== undefined ? stabilized.ledState : prevStatus?.ledState;
+      }
+
+      const isErrorState = /error|fail/i.test(stateStr);
+      const errorCode = stabilized.errorCode ?? (isErrorState ? prevStatus?.errorCode : undefined);
+      const errorMessage = stabilized.errorMessage ?? (isErrorState ? prevStatus?.errorMessage : undefined);
 
       const filtration =
         stabilized.filtrationMode && stabilized.filtrationMode !== 'none'
@@ -303,6 +317,8 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return {
         ...prevStatus,
         ...stabilized,
+        errorCode,
+        errorMessage,
         watchdog: effectiveWatchdog,
         coolingFanSpeed: coolingFan,
         fanSpeed: coolingFan,
@@ -493,6 +509,7 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
     async (contextId: string): Promise<boolean> => {
       try {
         activeJobCacheRef.current = null;
+        ledOverrideRef.current = null;
         if (featuresCacheRef.current.has(contextId)) {
           setFeatures(featuresCacheRef.current.get(contextId)!);
         } else {
@@ -519,6 +536,7 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
     async (index: number): Promise<boolean> => {
       try {
         activeJobCacheRef.current = null;
+        ledOverrideRef.current = null;
         const res = await api.selectPrinter(index);
         if (res.success) {
           const targetContext = contexts[index];
@@ -584,9 +602,21 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [activeContextId]);
 
   const setLed = useCallback(async (on: boolean) => {
-    const res = await api.setLed(on, activeContextId || undefined);
-    return res.success;
-  }, [activeContextId]);
+    ledOverrideRef.current = { value: on, expiresAt: Date.now() + 3500 };
+    setStatus((prev) => (prev ? { ...prev, ledState: on } : prev));
+    try {
+      const res = await api.setLed(on, activeContextId || undefined);
+      if (!res.success) {
+        ledOverrideRef.current = null;
+        await refreshStatus();
+      }
+      return res.success;
+    } catch {
+      ledOverrideRef.current = null;
+      await refreshStatus();
+      return false;
+    }
+  }, [activeContextId, refreshStatus]);
 
   const setBedTemp = useCallback(
     async (temp: number) => {

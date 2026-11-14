@@ -146,6 +146,9 @@ export interface CumulativeStats {
  */
 export interface PrinterStatus {
   state: PrinterState;
+  errorCode?: string;
+  errorMessage?: string;
+  ledState?: boolean;
   temperatures: PrinterTemperatures;
   fans: FanStatus;
   filtration: FiltrationStatus;

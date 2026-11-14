@@ -14,6 +14,7 @@ import {
 import type { Response, Router } from 'express';
 import { getWatchdogService } from '../../../services/WatchdogService.js';
 import { toAppError } from '../../../utils/error.utils.js';
+import { extractErrorInfoFromRecords, extractLedStateFromRecords } from '../../../utils/printer-error.utils.js';
 import type { AuthenticatedRequest } from '../auth-middleware.js';
 import { type RouteDependencies, resolveContext, sendErrorResponse } from './route-helpers.js';
 
@@ -122,17 +123,22 @@ export function registerPrinterStatusRoutes(router: Router, deps: RouteDependenc
         normProgress = normProgress * 100;
       }
 
+      const { errorCode, errorMessage } = extractErrorInfoFromRecords(rawStatus);
+      const ledState = extractLedStateFromRecords(rawStatus);
+
       const response: PrinterStatusResponse = {
         success: true,
         status: {
           printerState: statusResult.status.printerState,
+          ...(errorCode ? { errorCode } : {}),
+          ...(errorMessage ? { errorMessage } : {}),
           bedTemperature: statusResult.status.bedTemperature,
           bedTargetTemperature: bedTargetTemp,
           nozzleTemperature: statusResult.status.nozzleTemperature,
           nozzleTargetTemperature: nozzleTargetTemp,
           chamberTemperature: (statusResult.status as Record<string, unknown>).chamberTemperature as number | undefined,
           chamberTargetTemperature: (statusResult.status as Record<string, unknown>).chamberTargetTemperature as number | undefined,
-          ledState: (rawStatus.ledState as boolean | undefined),
+          ledState,
           coolingFanSpeed: (rawStatus.coolingFanSpeed as number | undefined),
           chamberFanSpeed: (rawStatus.chamberFanSpeed as number | undefined),
           printSpeed:

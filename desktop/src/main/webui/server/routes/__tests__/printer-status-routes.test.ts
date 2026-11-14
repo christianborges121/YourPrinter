@@ -203,4 +203,45 @@ describe('printer-status-routes', () => {
       },
     });
   });
+
+  it('forwards printer error details and strict boolean ledState (including false)', async () => {
+    const baseDeps = createDependencies();
+    const deps = createDependencies({
+      backendManager: {
+        ...baseDeps.backendManager,
+        getPrinterStatus: jest.fn().mockResolvedValue({
+          success: true,
+          status: {
+            printerState: 'error',
+            errorCode: 'E0014',
+            errorMessage: 'Z-axis homing error / sensor not triggered',
+            isLightOn: false,
+            bedTemperature: 18,
+            nozzleTemperature: 20,
+            progress: 0,
+            currentLayer: 0,
+            totalLayers: 82,
+          },
+        }),
+      },
+    });
+
+    const server = await startTestServer((app) => {
+      const router = express.Router();
+      registerPrinterStatusRoutes(router, deps);
+      app.use('/api', router);
+    });
+
+    const response = await fetch(`${server.baseUrl}/api/printer/status?contextId=context-1`);
+    const body = await response.json();
+    await server.close();
+
+    expect(response.status).toBe(200);
+    expect(body.status).toMatchObject({
+      printerState: 'error',
+      errorCode: 'E0014',
+      errorMessage: 'Z-axis homing error / sensor not triggered',
+      ledState: false,
+    });
+  });
 });

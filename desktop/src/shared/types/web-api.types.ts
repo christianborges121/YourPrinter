@@ -100,13 +100,14 @@ export interface WatchdogStatusData {
 export interface PrinterStatusData {
   contextId?: string;
   printerState: string;
+  errorCode?: string;
+  errorMessage?: string;
   bedTemperature: number;
   bedTargetTemperature: number;
   nozzleTemperature: number;
   nozzleTargetTemperature: number;
   chamberTemperature?: number;
   chamberTargetTemperature?: number;
-  printSpeed?: number;
   toolTemps?: number[];
   toolTargetTemps?: number[];
   ledState?: boolean;

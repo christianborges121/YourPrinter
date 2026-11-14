@@ -6,6 +6,7 @@
  */
 
 import type { StatusResult } from '@shared/types/printer-backend/index.js';
+import { formatBambuError } from '../../utils/printer-error.utils.js';
 
 export interface BambuStatusSnapshot {
   readonly printerState: string;
@@ -109,14 +110,17 @@ export function mapBambuStateToPrinterStatus(state: Record<string, unknown> | nu
 
     const currentJob = (s.subtask_name as string) || (s.gcode_file as string) || undefined;
 
-    // Detect chamber light mode
+    // Detect chamber light mode (keep ledState undefined when lights_report is absent so partial updates do not clobber cached state)
+    const hasLightsReport = Array.isArray(s.lights_report);
     let isLightOn = false;
-    if (Array.isArray(s.lights_report)) {
-      const chamberLight = s.lights_report.find(
+    if (hasLightsReport) {
+      const chamberLight = (s.lights_report as unknown[]).find(
         (l) => l && typeof l === 'object' && (l as { node?: string }).node === 'chamber_light'
       ) as { mode?: string } | undefined;
       isLightOn = chamberLight?.mode === 'on';
     }
+    const ledState = hasLightsReport ? isLightOn : undefined;
+    const errorInfo = formatBambuError(s.print_error, s.hms, s.fail_reason);
 
     // Extract Bambu print speed magnitude or level
     const spdMag = typeof s.spd_mag === 'number' ? s.spd_mag : undefined;
@@ -136,6 +140,8 @@ export function mapBambuStateToPrinterStatus(state: Record<string, unknown> | nu
 
     const statusObject = {
       printerState,
+      ...(errorInfo.errorCode ? { errorCode: errorInfo.errorCode } : {}),
+      ...(errorInfo.errorMessage ? { errorMessage: errorInfo.errorMessage } : {}),
       nozzleTemperature: nozzleTemp,
       nozzleTargetTemperature: nozzleTarget,
       bedTemperature: bedTemp,
@@ -150,6 +156,7 @@ export function mapBambuStateToPrinterStatus(state: Record<string, unknown> | nu
       toolTargetTemps: [nozzleTarget],
       bedTargetTemp: bedTarget,
       isLightOn,
+      ...(ledState !== undefined ? { ledState } : {}),
       printSpeed,
     };
 

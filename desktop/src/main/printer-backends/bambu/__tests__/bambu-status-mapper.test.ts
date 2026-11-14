@@ -79,6 +79,7 @@ describe('bambu-status-mapper', () => {
       expect(res.status.totalLayers).toBe(200);
       expect(res.status.currentJob).toBe('benchy.3mf');
       expect((res.status as any).isLightOn).toBe(true);
+      expect(res.status.ledState).toBe(true);
       expect(res.status.toolTemps).toEqual([215.4]);
       expect(res.status.toolTargetTemps).toEqual([220]);
     });
@@ -93,6 +94,21 @@ describe('bambu-status-mapper', () => {
       expect(res.success).toBe(true);
       expect(res.status.printerState).toBe('Completed');
       expect(res.status.progress).toBe(100);
+    });
+
+    it('maps explicit chamber light off and Bambu print errors', () => {
+      const sample = {
+        gcode_state: 'FAILED',
+        print_error: 0x05008010,
+        hms: [{ attr: 0x07000100, code: 0x00020001 }],
+        lights_report: [{ node: 'chamber_light', mode: 'off' }],
+      };
+      const res = mapBambuStateToPrinterStatus(sample);
+      expect(res.success).toBe(true);
+      expect(res.status.printerState).toBe('Error');
+      expect(res.status.ledState).toBe(false);
+      expect(res.status.errorCode).toBe('HMS_0700-0100-0002-0001');
+      expect(res.status.errorMessage).toContain('HMS_0700-0100-0002-0001');
     });
   });
 });

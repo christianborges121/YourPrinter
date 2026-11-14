@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play, Pause, Square, FileText, Clock, Layers, CheckCircle2 } from 'lucide-react';
+import { Play, Pause, Square, FileText, Clock, Layers, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { usePrinter } from '../../context/PrinterContext';
 import { StatusBadge } from '../common/StatusBadge';
 import { ConfirmModal } from '../modals/ConfirmModal';
@@ -22,13 +22,14 @@ export const JobProgressCard: React.FC = () => {
   const stateStr = status.printerState || '';
   const isPrinting = /print|busy|running/i.test(stateStr);
   const isPaused = /pause/i.test(stateStr);
+  const isError = /error|fail/i.test(stateStr) || Boolean(status.errorCode || status.errorMessage);
   let rawProg = status.progress || 0;
   if (rawProg > 0 && rawProg <= 1.0) {
     rawProg = rawProg * 100;
   }
   const isCompleted =
-    /complete|finish/i.test(stateStr) ||
-    (rawProg >= 100 && !isPrinting && !!status.jobName);
+    !isError &&
+    (/complete|finish/i.test(stateStr) || (rawProg >= 100 && !isPrinting && !!status.jobName));
 
   const progress = Math.min(Math.max(rawProg, 0), 100);
   const isJobActive = isPrinting || isPaused || (Boolean(status.jobName) && progress > 0 && progress < 100 && !isCompleted);
@@ -151,7 +152,9 @@ export const JobProgressCard: React.FC = () => {
       <div className="w-full bg-[#2E2E2E] h-2 rounded-full overflow-hidden">
         <div
           className={`h-full transition-all duration-500 rounded-full ${
-            isCompleted
+            isError
+              ? 'bg-[#EF4444]'
+              : isCompleted
               ? 'bg-[#3B82F6]'
               : isPaused
               ? 'bg-[#F59E0B]'
@@ -211,6 +214,37 @@ export const JobProgressCard: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Printer Error Banner */}
+      {isError && (
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-2 bg-[#EF4444]/10 border border-[#EF4444]/30 px-3 py-2 rounded-lg text-xs text-[#FCA5A5]"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertTriangle size={15} className="text-[#EF4444] shrink-0" />
+            <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+              {status.errorCode && (
+                <span className="font-mono font-bold px-1.5 py-0.5 rounded bg-[#EF4444]/20 border border-[#EF4444]/40 text-[#FEE2E2] shrink-0">
+                  {status.errorCode}
+                </span>
+              )}
+              <span className="font-medium text-[#FEE2E2] break-words">
+                {status.errorMessage || 'Printer reported an error — check the printer touchscreen for details.'}
+              </span>
+            </div>
+          </div>
+          {!isPrinting && (
+            <button
+              onClick={handleClearStatus}
+              disabled={isBusy}
+              className="shrink-0 flex items-center gap-1 px-2.5 py-1 rounded bg-[#EF4444] hover:bg-[#DC2626] text-white font-medium text-xs transition-colors shadow-sm disabled:opacity-50"
+            >
+              Clear Status
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Completed Banner with Clear Status Action */}
       {isCompleted && (

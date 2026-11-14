@@ -21,7 +21,12 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
   let dotClass = 'bg-[#F59E0B]';
   let borderClass = 'border-[#F59E0B]/30';
 
-  if (isCompleted || lower.includes('complete') || lower.includes('finished')) {
+  if (lower.includes('error') || lower.includes('fail')) {
+    bgClass = 'bg-[#EF4444]/15';
+    fgClass = 'text-[#EF4444]';
+    dotClass = 'bg-[#EF4444] shadow-[0_0_8px_#EF4444]';
+    borderClass = 'border-[#EF4444]/30';
+  } else if (isCompleted || lower.includes('complete') || lower.includes('finished')) {
     bgClass = 'bg-[#3B82F6]/15';
     fgClass = 'text-[#3B82F6]';
     dotClass = 'bg-[#3B82F6]';

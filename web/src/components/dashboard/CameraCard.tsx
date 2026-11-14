@@ -8,12 +8,11 @@ import {
   Infinity as InfinityIcon,
   ShieldAlert,
   Camera,
-  Lightbulb,
-  LightbulbOff,
 } from 'lucide-react';
 import { usePrinter } from '../../context/PrinterContext';
 import { api } from '../../services/api';
 import { getCameraContinuous, setCameraContinuous } from '../../services/config';
+import { LedToggleButton } from '../common/LedToggleButton';
 
 interface CameraCardProps {
   onOpenHud: () => void;
@@ -28,16 +27,8 @@ const SNAPSHOT_FAILURE_THRESHOLD_WITH_FRAME = 3;
 const SNAPSHOT_FAILURE_THRESHOLD_INITIAL = 2;
 
 export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdog }) => {
-  const { activeContextId, activeContext, status, features, capabilities, setLed } = usePrinter();
+  const { activeContextId, status } = usePrinter();
   const videoRef = useRef<HTMLVideoElement | null>(null);
-
-  const modelStr = (activeContext?.model || '').toLowerCase();
-  const nameStr = (activeContext?.name || '').toLowerCase();
-  const isCreator5 =
-    modelStr.includes('creator') ||
-    nameStr.includes('creator') ||
-    (modelStr.includes('ad5x') && nameStr.includes('c5'));
-  const hasLedControl = isCreator5 ? true : (capabilities?.hasLedControl ?? (features?.hasLED ?? true));
 
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [countdown, setCountdown] = useState<number>(30);
@@ -567,20 +558,7 @@ export const CameraCard: React.FC<CameraCardProps> = ({ onOpenHud, onOpenWatchdo
           </button>
 
           {/* Chamber Lighting Quick Toggle */}
-          {hasLedControl && (
-            <button
-              onClick={() => void setLed(!status?.ledState)}
-              aria-label={status?.ledState ? 'Turn Chamber Light Off' : 'Turn Chamber Light On'}
-              title={status?.ledState ? 'Chamber Light: ON (Click to turn off)' : 'Chamber Light: OFF (Click to turn on)'}
-              className={`p-1.5 rounded-lg border transition-all ${
-                status?.ledState
-                  ? 'bg-[#F59E0B]/20 border-[#F59E0B]/50 text-[#F59E0B] shadow-[0_0_8px_rgba(245,158,11,0.25)]'
-                  : 'bg-[#262626] border-[#2E2E2E] text-[#64748B] hover:text-[#94A3B8]'
-              }`}
-            >
-              {status?.ledState ? <Lightbulb size={15} /> : <LightbulbOff size={15} />}
-            </button>
-          )}
+          <LedToggleButton />
 
           {/* Capture Snapshot Button */}
           <button

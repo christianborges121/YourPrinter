@@ -76,6 +76,9 @@ export interface GCodeCommandResult extends CommandResult {
 export interface StatusResult extends CommandResult {
   readonly status: {
     readonly printerState: string;
+    readonly errorCode?: string;
+    readonly errorMessage?: string;
+    readonly ledState?: boolean;
     readonly bedTemperature: number;
     readonly nozzleTemperature: number;
     readonly progress: number;

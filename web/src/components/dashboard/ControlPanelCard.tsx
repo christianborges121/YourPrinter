@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Sliders, Move, Home, Lightbulb, LightbulbOff, Wind, Fan, Gauge } from 'lucide-react';
+import { Sliders, Move, Home, Wind, Fan, Gauge } from 'lucide-react';
 import { usePrinter } from '../../context/PrinterContext';
+import { LedToggleButton } from '../common/LedToggleButton';
 import { JogModal } from '../modals/JogModal';
 
 export const ControlPanelCard: React.FC = () => {
-  const { status, features, capabilities, activeContext, homeAxes, setLed, setFiltration, setCoolingFanSpeed, setPrintSpeed } = usePrinter();
+  const { status, features, capabilities, activeContext, homeAxes, setFiltration, setCoolingFanSpeed, setPrintSpeed } = usePrinter();
   const [jogModalOpen, setJogModalOpen] = useState(false);
-  const [ledState, setLedState] = useState(true);
   const [isHoming, setIsHoming] = useState(false);
   const [fanSpeed, setFanSpeed] = useState<number>(0);
   const [currentSpeed, setCurrentSpeed] = useState<number>(100);
@@ -27,7 +27,6 @@ export const ControlPanelCard: React.FC = () => {
   const canHome = isCreator5 ? false : capabilities ? capabilities.canHome : false;
   const hasPartCoolingFan = isCreator5 ? true : (capabilities?.hasPartCoolingFan ?? true);
   const hasFiltration = isCreator5 ? true : (capabilities ? capabilities.hasFiltration : (features?.hasFiltration ?? false));
-  const hasLedControl = isCreator5 ? true : (capabilities?.hasLedControl ?? (features?.hasLED ?? true));
 
   const activeFiltration =
     selectedFiltration ?? (status?.filtrationMode === 'none' || !status?.filtrationMode ? 'off' : status.filtrationMode);
@@ -48,13 +47,6 @@ export const ControlPanelCard: React.FC = () => {
     }
   }, [status?.coolingFanSpeed, status?.fanSpeed]);
 
-  // Sync LED state if provided in telemetry
-  useEffect(() => {
-    if (typeof status?.ledState === 'boolean') {
-      setLedState(status.ledState);
-    }
-  }, [status?.ledState]);
-
   // Sync print speed if provided in telemetry
   useEffect(() => {
     if (typeof status?.printSpeed === 'number' && status.printSpeed > 0) {
@@ -65,12 +57,6 @@ export const ControlPanelCard: React.FC = () => {
   const handleSpeedChange = async (target: number) => {
     setCurrentSpeed(target);
     await setPrintSpeed(target);
-  };
-
-  const handleToggleLed = async () => {
-    const next = !ledState;
-    setLedState(next);
-    await setLed(next);
   };
 
   const handleHome = async () => {
@@ -99,20 +85,7 @@ export const ControlPanelCard: React.FC = () => {
         </div>
 
         {/* Single Chamber Lightbulb Icon Toggle */}
-        {hasLedControl && (
-          <button
-            onClick={handleToggleLed}
-            aria-label={ledState ? 'Turn Chamber Light Off' : 'Turn Chamber Light On'}
-            title={ledState ? 'Chamber Light: ON (Click to turn off)' : 'Chamber Light: OFF (Click to turn on)'}
-            className={`p-1.5 rounded-lg border transition-all ${
-              ledState
-                ? 'bg-[#F59E0B]/20 border-[#F59E0B]/50 text-[#F59E0B] shadow-[0_0_8px_rgba(245,158,11,0.25)]'
-                : 'bg-[#262626] border-[#2E2E2E] text-[#64748B] hover:text-[#94A3B8]'
-            }`}
-          >
-            {ledState ? <Lightbulb size={15} /> : <LightbulbOff size={15} />}
-          </button>
-        )}
+        <LedToggleButton />
       </div>
 
       {/* Button Grid: Axes / Jog & Home All (only when supported) */}

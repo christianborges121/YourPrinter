@@ -33,6 +33,8 @@ export interface WatchdogStatusData {
 export interface PrinterStatusData {
   contextId?: string;
   printerState: string;
+  errorCode?: string;
+  errorMessage?: string;
   bedTemperature: number;
   bedTargetTemperature: number;
   nozzleTemperature: number;
@@ -182,6 +184,8 @@ export interface PrinterContext {
 
 export interface FleetOverviewStatus {
   printerState: string;
+  errorCode?: string;
+  errorMessage?: string;
   bedTemperature: number;
   bedTargetTemperature: number;
   nozzleTemperature: number;
