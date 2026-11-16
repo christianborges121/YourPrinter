@@ -74,7 +74,7 @@ describe('bambu-status-mapper', () => {
       expect(res.status.bedTemperature).toBe(60.1);
       expect(res.status.bedTargetTemperature).toBe(60);
       expect(res.status.progress).toBe(45);
-      expect(res.status.remainingTime).toBe(25 * 60);
+      expect(res.status.remainingTime).toBe(25);
       expect(res.status.currentLayer).toBe(88);
       expect(res.status.totalLayers).toBe(200);
       expect(res.status.currentJob).toBe('benchy.3mf');

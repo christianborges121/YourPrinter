@@ -5,6 +5,7 @@ import '../../core/constants/app_colors.dart';
 import '../../state/auth_provider.dart';
 import '../../state/printer_context_provider.dart';
 import '../../state/telemetry_provider.dart';
+import '../../utils/progress_utils.dart';
 import '../common/skeleton_shimmer.dart';
 import '../common/status_badge.dart';
 
@@ -50,7 +51,26 @@ class JobProgressCard extends ConsumerWidget {
 
     final status = telemetryState.status!;
     final isPrinting = status.isPrinting;
-    final isCompleted = status.isCompleted;
+    final isPaused = status.isPaused;
+    final stateLower = status.printerState.toLowerCase();
+    final isError = stateLower.contains('error') || stateLower.contains('fail');
+    final isCompleted = !isError && status.isCompleted;
+    final displayProgress = normalizeProgressPercent(status.progress, isCompleted: isCompleted);
+    final effectiveElapsedSeconds = status.elapsedTimeSeconds > 0
+        ? status.elapsedTimeSeconds
+        : ((status.timeElapsed ?? 0) * 60);
+    final remainingText = isCompleted
+        ? 'Done'
+        : (status.timeRemaining != null && status.timeRemaining! > 0)
+            ? formatRemainingMinutes(status.timeRemaining!)
+            : (status.formattedEta ?? '--:--');
+    final barColor = isError
+        ? AppColors.error
+        : isCompleted
+            ? AppColors.info
+            : isPaused
+                ? AppColors.warning
+                : AppColors.accentGreen;
 
     return Card(
       child: Padding(
@@ -162,12 +182,10 @@ class JobProgressCard extends ConsumerWidget {
             ClipRRect(
               borderRadius: BorderRadius.circular(3),
               child: LinearProgressIndicator(
-                value: (status.progress / 100.0).clamp(0.0, 1.0),
+                value: (displayProgress / 100.0).clamp(0.0, 1.0),
                 minHeight: 6,
                 backgroundColor: AppColors.border,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  isCompleted ? AppColors.info : AppColors.accentGreen,
-                ),
+                valueColor: AlwaysStoppedAnimation<Color>(barColor),
               ),
             ),
             const SizedBox(height: 8),
@@ -180,21 +198,19 @@ class JobProgressCard extends ConsumerWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      '${status.progress.toStringAsFixed(1)}%',
+                      '${displayProgress.toStringAsFixed(1)}%',
                       style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary, fontSize: 13),
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      status.timeRemaining != null
-                          ? _formatSeconds(status.timeRemaining!)
-                          : (status.formattedEta ?? '--:--'),
+                      remainingText,
                       style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
                     ),
                   ],
                 ),
                 Text(
                   (status.totalLayers > 0 && status.currentLayer > 0)
-                      ? 'Layer ${status.currentLayer} / ${status.totalLayers} (${((status.currentLayer / status.totalLayers) * 100).round()}%)'
+                      ? 'Layer ${status.currentLayer} / ${status.totalLayers} (${((status.currentLayer / status.totalLayers) * 100).round().clamp(0, 100)}%)'
                       : 'Layer ${status.currentLayer} / ${status.totalLayers}',
                   style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
                 ),
@@ -212,7 +228,7 @@ class JobProgressCard extends ConsumerWidget {
                     const Text('Elapsed', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
                     const SizedBox(width: 4),
                     Text(
-                      _formatDuration(status.elapsedTimeSeconds > 0 ? status.elapsedTimeSeconds : (status.timeElapsed ?? 0)),
+                      formatDurationSeconds(effectiveElapsedSeconds),
                       style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
                     ),
                   ],
@@ -264,24 +280,5 @@ class JobProgressCard extends ConsumerWidget {
         ),
       ),
     );
-  }
-
-  String _formatDuration(int totalSeconds) {
-    if (totalSeconds <= 0) return '--';
-    final hours = totalSeconds ~/ 3600;
-    final minutes = (totalSeconds % 3600) ~/ 60;
-    if (hours > 0) {
-      return '${hours}h ${minutes}m';
-    }
-    return '${minutes}m ${totalSeconds % 60}s';
-  }
-
-  String _formatSeconds(int totalSeconds) {
-    final hours = totalSeconds ~/ 3600;
-    final minutes = (totalSeconds % 3600) ~/ 60;
-    if (hours > 0) {
-      return '${hours}h ${minutes}m left';
-    }
-    return '${minutes}m left';
   }
 }

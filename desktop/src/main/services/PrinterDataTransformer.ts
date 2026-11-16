@@ -266,12 +266,12 @@ export class PrinterDataTransformer {
     // Modern backends: may provide 0.0-1.0 decimal format
     let progressPercentage = 0;
     if (rawProgress > 0) {
-      if (rawProgress <= 1.0) {
-        // Decimal format (0.0-1.0) from modern backends
+      if (rawProgress < 1.0) {
+        // Decimal format (0.0-1.0 exclusive) from modern backends
         progressPercentage = rawProgress * 100;
         console.log(`[DataTransformer] Converting decimal progress: ${rawProgress} → ${progressPercentage}%`);
       } else {
-        // Integer format (0-100) from legacy PrintStatus.getPrintPercent()
+        // Integer/percent format (1-100) from backends
         progressPercentage = Math.min(rawProgress, 100); // Clamp to 100
         console.log(`[DataTransformer] Using integer progress: ${progressPercentage}%`);
       }

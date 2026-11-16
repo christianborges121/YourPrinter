@@ -19,7 +19,7 @@ const webPkg = path.join(webDir, 'package.json');
 const outDir = path.join(desktopRoot, 'out/webui/static');
 
 if (fs.existsSync(webPkg)) {
-  console.log('[build:webui] Found modern WebUI in', webDir);
+  console.log('[build:webui] Found WebUI in', webDir);
   console.log('[build:webui] Building web assets with Vite...');
   execSync('npm --prefix ../web run build', { cwd: desktopRoot, stdio: 'inherit' });
 

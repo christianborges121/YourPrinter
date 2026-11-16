@@ -177,4 +177,27 @@ describe('PrinterDataTransformer', () => {
     expect(printerDataTransformer.transformPrinterStatus(null)).toBeNull();
     expect(printerDataTransformer.transformMaterialStation(null)).toBeNull();
   });
+
+  it('preserves integer 1 as 1% progress while scaling 0.0-1.0 decimals < 1.0', () => {
+    const onePercentStatus = printerDataTransformer.transformPrinterStatus({
+      printerState: 'printing',
+      currentJob: 'long-print.gcode',
+      progress: 1,
+      printDuration: 120,
+      remainingTime: 480,
+    });
+
+    expect(onePercentStatus?.currentJob?.progress.percentage).toBe(1);
+    expect(onePercentStatus?.currentJob?.progress.timeRemaining).toBe(480);
+
+    const decimalStatus = printerDataTransformer.transformPrinterStatus({
+      printerState: 'printing',
+      currentJob: 'long-print.gcode',
+      progress: 0.75,
+      printDuration: 120,
+      remainingTime: 40,
+    });
+
+    expect(decimalStatus?.currentJob?.progress.percentage).toBe(75);
+  });
 });

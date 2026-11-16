@@ -139,6 +139,11 @@ export interface DiscordConfigData {
   webhookUrl: string;
   includeCameraSnapshots: boolean;
   updateIntervalMinutes: number;
+  notifyOnStart: boolean;
+  notifyOnPause: boolean;
+  notifyOnStop: boolean;
+  notifyOnError: boolean;
+  progressIntervalPercent: number;
 }
 
 export interface SpoolmanConfigData {

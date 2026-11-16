@@ -8,6 +8,7 @@ import '../../state/connection_provider.dart';
 import '../../state/fleet_provider.dart';
 import '../../state/printer_context_provider.dart';
 import '../../state/telemetry_provider.dart';
+import '../../utils/progress_utils.dart';
 import '../common/not_configured_view.dart';
 import '../common/status_badge.dart';
 import '../controls/control_panel_card.dart';
@@ -661,7 +662,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               ),
                             ),
                             Text(
-                              '${fleetPrinter.progress.toStringAsFixed(0)}%',
+                              '${normalizeProgressPercent(fleetPrinter.progress, isCompleted: isCompleted).toStringAsFixed(0)}%',
                               style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
                             ),
                           ],
@@ -670,7 +671,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         ClipRRect(
                           borderRadius: BorderRadius.circular(4),
                           child: LinearProgressIndicator(
-                            value: (fleetPrinter.progress / 100.0).clamp(0.0, 1.0),
+                            value: (normalizeProgressPercent(fleetPrinter.progress, isCompleted: isCompleted) / 100.0).clamp(0.0, 1.0),
                             minHeight: 6,
                             backgroundColor: AppColors.border,
                             valueColor: AlwaysStoppedAnimation<Color>(

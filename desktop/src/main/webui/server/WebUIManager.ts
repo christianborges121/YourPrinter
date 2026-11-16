@@ -170,7 +170,7 @@ export class WebUIManager extends EventEmitter {
     const webUIStaticPath = this.environmentService.getWebUIStaticPath();
     console.log(`WebUI serving static files from: ${webUIStaticPath}`);
 
-    // If accessed on the legacy backend port (e.g. 3081), redirect root browser requests to Modern WebUI on port 3080
+    // If accessed on the legacy backend port (e.g. 3081), redirect root browser requests to WebUI on port 3080
     this.expressApp.get('/', (req, res, next) => {
       const host = req.headers.host;
       if (host && host.includes(':3081')) {

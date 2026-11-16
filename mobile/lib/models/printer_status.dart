@@ -1,3 +1,5 @@
+import '../utils/progress_utils.dart';
+
 class WatchdogSnapshotItem {
   final String filename;
   final String timestamp;
@@ -166,8 +168,11 @@ class PrinterStatusData {
       (progress >= 100.0 && !hasActiveJob && jobName != null);
 
   factory PrinterStatusData.fromJson(Map<String, dynamic> json) {
+    final rawState = json['printerState'] as String? ?? 'Idle';
+    final stateLower = rawState.toLowerCase();
+    final isCompleteState = stateLower.contains('complete') || stateLower.contains('finish');
     return PrinterStatusData(
-      printerState: json['printerState'] as String? ?? 'Idle',
+      printerState: rawState,
       bedTemperature: (json['bedTemperature'] as num?)?.toDouble() ?? 0.0,
       bedTargetTemperature: (json['bedTargetTemperature'] as num?)?.toDouble() ?? 0.0,
       nozzleTemperature: (json['nozzleTemperature'] as num?)?.toDouble() ?? 0.0,
@@ -176,7 +181,7 @@ class PrinterStatusData {
       chamberTargetTemperature: (json['chamberTargetTemperature'] as num?)?.toDouble(),
       toolTemps: (json['toolTemps'] as List<dynamic>?)?.map((e) => (e as num).toDouble()).toList() ?? const [],
       toolTargetTemps: (json['toolTargetTemps'] as List<dynamic>?)?.map((e) => (e as num).toDouble()).toList() ?? const [],
-      progress: (json['progress'] as num?)?.toDouble() ?? 0.0,
+      progress: normalizeProgressPercent((json['progress'] as num?)?.toDouble(), isCompleted: isCompleteState),
       layerProgress: (json['layerProgress'] as num?)?.toDouble(),
       currentLayer: (json['currentLayer'] as num?)?.toInt() ?? 0,
       totalLayers: (json['totalLayers'] as num?)?.toInt() ?? 0,

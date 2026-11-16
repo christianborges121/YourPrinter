@@ -119,9 +119,10 @@ export function registerPrinterStatusRoutes(router: Router, deps: RouteDependenc
       }
 
       let normProgress = /completed|finish/i.test(statusResult.status.printerState || '') ? 100 : (statusResult.status.progress ?? 0);
-      if (normProgress > 0 && normProgress <= 1.0) {
+      if (normProgress > 0 && normProgress < 1.0) {
         normProgress = normProgress * 100;
       }
+      normProgress = Math.min(100, Math.max(0, normProgress));
 
       const { errorCode, errorMessage } = extractErrorInfoFromRecords(rawStatus);
       const ledState = extractLedStateFromRecords(rawStatus);

@@ -1,4 +1,4 @@
-# Multi-stage build for YourPrinter Modern WebUI
+# Multi-stage build for YourPrinter WebUI
 FROM node:22-alpine AS build
 
 WORKDIR /app

@@ -85,9 +85,9 @@ export function mapBambuStateToPrinterStatus(state: Record<string, unknown> | nu
     const isCompleted = printerState.toLowerCase() === 'completed';
     let progress = isCompleted ? 100 : safeNumber(s.mc_percent, 0);
 
-    // Remaining time in seconds (Bambu provides mc_remaining_time in minutes)
+    // Remaining time in minutes (Bambu provides mc_remaining_time in minutes, matching JobProgress.timeRemaining)
     const remainingMinutes = s.mc_remaining_time !== undefined ? safeNumber(s.mc_remaining_time, 0) : undefined;
-    const remainingTime = remainingMinutes !== undefined && remainingMinutes >= 0 ? remainingMinutes * 60 : undefined;
+    const remainingTime = remainingMinutes !== undefined && remainingMinutes >= 0 ? remainingMinutes : undefined;
 
     const currentLayer = s.layer_num !== undefined ? safeNumber(s.layer_num, 0) : undefined;
     const totalLayers = s.total_layer_num !== undefined ? safeNumber(s.total_layer_num, 0) : undefined;

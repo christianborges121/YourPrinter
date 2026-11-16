@@ -745,7 +745,7 @@ function createCardElement(printer: FleetOverviewPrinter): HTMLElement {
   const rawProgress = printer.status?.progress ?? 0;
   const progress = isCompleted
     ? 100
-    : (rawProgress <= 1 && rawProgress > 0 ? Math.round(rawProgress * 100) : Math.round(rawProgress));
+    : (rawProgress < 1 && rawProgress > 0 ? Math.round(rawProgress * 100) : Math.round(rawProgress));
   const jobLabel = isCompleted ? 'Completed:' : 'Job:';
   const jobName = printer.status?.jobName || (isCompleted ? 'Finished Print' : (printer.isConnected ? 'No active print job' : 'Printer offline'));
   const progressText = isCompleted ? 'Done' : `${progress}%`;
@@ -922,7 +922,7 @@ function updateCardInPlace(printer: FleetOverviewPrinter, card: HTMLElement): vo
   const rawProgress = printer.status?.progress ?? 0;
   const progress = isCompleted
     ? 100
-    : (rawProgress <= 1 && rawProgress > 0 ? Math.round(rawProgress * 100) : Math.round(rawProgress));
+    : (rawProgress < 1 && rawProgress > 0 ? Math.round(rawProgress * 100) : Math.round(rawProgress));
   const jobLabel = isCompleted ? 'Completed:' : 'Job:';
   const jobName = printer.status?.jobName || (isCompleted ? 'Finished Print' : (printer.isConnected ? 'No active print job' : 'Printer offline'));
   const progressText = isCompleted ? 'Done' : `${progress}%`;

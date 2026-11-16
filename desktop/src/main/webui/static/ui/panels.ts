@@ -161,7 +161,7 @@ export function updatePrinterStatus(status: PrinterStatus | null): void {
     setTextContent('current-job', status.jobName || 'Completed');
 
     const progress = isNaN(status.progress) ? 0 : status.progress;
-    const progressPercent = isCompleted ? 100 : (progress <= 1 && progress > 0 ? Math.round(progress * 100) : Math.round(progress));
+    const progressPercent = isCompleted ? 100 : (progress < 1 && progress > 0 ? Math.round(progress * 100) : Math.round(progress));
     setTextContent('progress-percentage', `${progressPercent}%`);
 
     const progressBar = $('progress-bar') as HTMLProgressElement | null;

@@ -3,6 +3,7 @@ import { Play, Pause, Square, FileText, Clock, Layers, CheckCircle2, AlertTriang
 import { usePrinter } from '../../context/PrinterContext';
 import { StatusBadge } from '../common/StatusBadge';
 import { ConfirmModal } from '../modals/ConfirmModal';
+import { formatDurationSeconds, formatRemainingMinutes, normalizeProgressPercent } from '../../utils/progress';
 
 export const JobProgressCard: React.FC = () => {
   const { status, activeContext, pausePrint, resumePrint, cancelPrint, clearStatus } = usePrinter();
@@ -23,27 +24,26 @@ export const JobProgressCard: React.FC = () => {
   const isPrinting = /print|busy|running/i.test(stateStr);
   const isPaused = /pause/i.test(stateStr);
   const isError = /error|fail/i.test(stateStr) || Boolean(status.errorCode || status.errorMessage);
-  let rawProg = status.progress || 0;
-  if (rawProg > 0 && rawProg <= 1.0) {
-    rawProg = rawProg * 100;
-  }
+  const normalizedBase = normalizeProgressPercent(status.progress, false);
   const isCompleted =
     !isError &&
-    (/complete|finish/i.test(stateStr) || (rawProg >= 100 && !isPrinting && !!status.jobName));
+    (/complete|finish/i.test(stateStr) || (normalizedBase >= 100 && !isPrinting && !!status.jobName));
 
-  const progress = Math.min(Math.max(rawProg, 0), 100);
+  const progress = normalizeProgressPercent(status.progress, isCompleted);
   const isJobActive = isPrinting || isPaused || (Boolean(status.jobName) && progress > 0 && progress < 100 && !isCompleted);
 
-  // Format seconds to H:MM or M:SS
-  const formatTime = (seconds?: number): string => {
-    if (!seconds || seconds <= 0) return '--';
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    if (hrs > 0) {
-      return `${hrs}h ${mins}m`;
-    }
-    return `${mins}m ${Math.floor(seconds % 60)}s`;
-  };
+  const effectiveElapsedSeconds =
+    status.elapsedTimeSeconds && status.elapsedTimeSeconds > 0
+      ? status.elapsedTimeSeconds
+      : status.timeElapsed && status.timeElapsed > 0
+      ? status.timeElapsed * 60
+      : 0;
+
+  const remainingDisplay = isCompleted
+    ? 'Done'
+    : status.timeRemaining != null && status.timeRemaining > 0
+    ? formatRemainingMinutes(status.timeRemaining)
+    : status.formattedEta || '--';
 
   const handlePauseResume = async () => {
     if (isBusy) return;
@@ -172,7 +172,7 @@ export const JobProgressCard: React.FC = () => {
           </span>
           <span className="text-[#94A3B8] font-medium flex items-center gap-1">
             <Clock size={12} className="text-[#94A3B8]" />
-            {isCompleted ? 'Done' : (status.formattedEta || formatTime(status.timeRemaining))}
+            {remainingDisplay}
           </span>
         </div>
 
@@ -192,7 +192,7 @@ export const JobProgressCard: React.FC = () => {
           <div className="flex items-center gap-1 text-[#94A3B8]">
             <span>Elapsed:</span>
             <span className="font-semibold text-[#F3F4F6]">
-              {formatTime(status.elapsedTimeSeconds || status.timeElapsed)}
+              {formatDurationSeconds(effectiveElapsedSeconds)}
             </span>
           </div>
 

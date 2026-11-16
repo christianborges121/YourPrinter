@@ -12,6 +12,7 @@ import { api } from '../services/api';
 import { wsClient } from '../services/websocket';
 import { getSavedContextId, setSavedContextId, getDisabledPrinterIds, setDisabledPrinterIds } from '../services/config';
 import { addPrintHistoryItem } from '../services/printHistory';
+import { normalizeProgressPercent } from '../utils/progress';
 
 interface PrinterContextType {
   contexts: PrinterContext[];
@@ -176,15 +177,12 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const ledOverrideRef = useRef<{ value: boolean; expiresAt: number } | null>(null);
 
   const applyStatusWithStabilization = useCallback((rawIncoming: PrinterStatusData) => {
-    let normProg = rawIncoming.progress;
-    if (typeof normProg === 'number' && normProg > 0 && normProg <= 1.0) {
-      normProg = normProg * 100;
-    }
-
-    let stabilized: PrinterStatusData = { ...rawIncoming, progress: normProg };
-    const stateStr = (stabilized.printerState || '').toLowerCase();
+    const stateStr = (rawIncoming.printerState || '').toLowerCase();
     const isPrintingOrPaused = /print|pause|busy|running/i.test(stateStr);
     const isCompleted = /complet|finish|done/i.test(stateStr);
+    const normProg = normalizeProgressPercent(rawIncoming.progress, isCompleted);
+
+    let stabilized: PrinterStatusData = { ...rawIncoming, progress: normProg };
 
     if (isPrintingOrPaused && stabilized.jobName) {
       activeJobCacheRef.current = {

@@ -13,6 +13,7 @@ import {
 import type { FleetOverviewPrinter } from '../../types';
 import { StatusBadge } from '../common/StatusBadge';
 import { api } from '../../services/api';
+import { formatRemainingMinutes, normalizeProgressPercent } from '../../utils/progress';
 
 export type FleetLayoutMode = 'small' | 'medium' | 'large' | 'list';
 
@@ -299,6 +300,7 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
     : 'Offline';
 
   const isPrinting = /print|busy|running/i.test(rawState);
+  const isPaused = /pause/i.test(rawState);
   const isError = /error|fail/i.test(rawState) || Boolean(rawStatus?.errorCode || rawStatus?.errorMessage);
   const isCompleted = !isError && /complete|finish/i.test(rawState);
   const errorSummary = rawStatus?.errorCode
@@ -308,19 +310,25 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
     : rawStatus?.errorMessage || null;
 
   const rawProgress = rawStatus?.progress ?? printer.progress ?? 0;
-  const progress = isCompleted
-    ? 100
-    : Math.round(rawProgress <= 1 && rawProgress > 0 ? rawProgress * 100 : rawProgress);
+  const progress = Math.round(normalizeProgressPercent(rawProgress, isCompleted));
 
   const rawJobName = rawStatus?.jobName ?? printer.jobName ?? null;
-  const hasJob = Boolean(rawJobName || isPrinting || isCompleted);
-  const displayJobName = rawJobName || (isPrinting ? 'Active Print' : isCompleted ? 'Completed Print' : 'Ready to print');
+  const hasJob = Boolean(rawJobName || isPrinting || isPaused || isCompleted);
+  const displayJobName = rawJobName || (isPrinting ? 'Active Print' : isPaused ? 'Paused Print' : isCompleted ? 'Completed Print' : 'Ready to print');
+  const barColorClass = isError
+    ? 'bg-[#EF4444]'
+    : isCompleted
+    ? 'bg-[#3B82F6]'
+    : isPaused
+    ? 'bg-[#F59E0B]'
+    : 'bg-[#00AE42]';
 
   const nozzleTemp = rawStatus?.nozzleTemperature ?? printer.nozzleTemp ?? 0;
   const bedTemp = rawStatus?.bedTemperature ?? printer.bedTemp ?? 0;
   const currentLayer = rawStatus?.currentLayer ?? printer.currentLayer ?? null;
   const totalLayers = rawStatus?.totalLayers ?? printer.totalLayers ?? null;
   const formattedEta = rawStatus?.formattedEta ?? null;
+  const timeRemaining = rawStatus?.timeRemaining ?? null;
 
   const layerText = currentLayer !== null
     ? `Layer ${currentLayer}${totalLayers && totalLayers > 0 ? ` / ${totalLayers} (${Math.min(100, Math.round((currentLayer / totalLayers) * 100))}%)` : ''}`
@@ -330,7 +338,13 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
     ? 'Printing...'
     : 'Standby';
 
-  const etaText = formattedEta ? `ETA: ${formattedEta}` : '';
+  const etaText = isCompleted
+    ? 'Done'
+    : timeRemaining != null && timeRemaining > 0
+    ? formatRemainingMinutes(timeRemaining)
+    : formattedEta
+    ? `ETA: ${formattedEta}`
+    : '';
 
   const isSmall = layoutMode === 'small';
   const isLarge = layoutMode === 'large';
@@ -549,7 +563,7 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
           <div className="w-full bg-[#262626] h-1.5 rounded-full overflow-hidden my-0.5">
             {hasJob || isError ? (
               <div
-                className={`h-full rounded-full transition-all duration-300 ${isError ? 'bg-[#EF4444]' : 'bg-[#00AE42]'}`}
+                className={`h-full rounded-full transition-all duration-300 ${barColorClass}`}
                 style={{ width: `${isError && !hasJob ? 100 : Math.min(Math.max(progress, 0), 100)}%` }}
               />
             ) : null}
@@ -649,7 +663,7 @@ export const FleetPrinterCard: React.FC<FleetPrinterCardProps> = ({
           <div className="w-full bg-[#262626] h-1.5 rounded-full overflow-hidden my-0.5">
             {hasJob || isError ? (
               <div
-                className={`h-full rounded-full transition-all duration-300 ${isError ? 'bg-[#EF4444]' : 'bg-[#00AE42]'}`}
+                className={`h-full rounded-full transition-all duration-300 ${barColorClass}`}
                 style={{ width: `${isError && !hasJob ? 100 : Math.min(Math.max(progress, 0), 100)}%` }}
               />
             ) : null}

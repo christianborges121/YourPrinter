@@ -7,6 +7,7 @@ import '../../models/printer_context.dart';
 import '../../services/camera_stream_service.dart';
 import '../../state/auth_provider.dart';
 import '../../state/fleet_provider.dart';
+import '../../utils/progress_utils.dart';
 import '../common/status_badge.dart';
 
 class FleetPrinterCard extends ConsumerStatefulWidget {
@@ -79,8 +80,23 @@ class _FleetPrinterCardState extends ConsumerState<FleetPrinterCard> {
   @override
   Widget build(BuildContext context) {
     final p = widget.printer;
-    final isPrinting = p.statusText.toLowerCase().contains('print') || p.statusText.toLowerCase().contains('busy');
-    final isCompleted = p.statusText.toLowerCase().contains('complete') || (p.progress >= 100 && !isPrinting && p.jobName != null);
+    final stateLower = p.statusText.toLowerCase();
+    final isPrinting = stateLower.contains('print') || stateLower.contains('busy') || stateLower.contains('running');
+    final isPaused = stateLower.contains('pause');
+    final isError = stateLower.contains('error') || stateLower.contains('fail');
+    final isCompleted = !isError && (stateLower.contains('complete') || stateLower.contains('finish') || (p.progress >= 100 && !isPrinting && p.jobName != null));
+    final displayProgress = normalizeProgressPercent(p.progress, isCompleted: isCompleted);
+    final hasJob = isPrinting || isPaused || isCompleted || (p.jobName != null && p.jobName!.isNotEmpty);
+    final displayJobName = (p.jobName != null && p.jobName!.isNotEmpty)
+        ? p.jobName!
+        : (isPrinting ? 'Active Print' : isCompleted ? 'Completed Print' : 'No active print job');
+    final barColor = isError
+        ? AppColors.error
+        : isCompleted
+            ? AppColors.info
+            : isPaused
+                ? AppColors.warning
+                : AppColors.accentGreen;
     final cardCameraState = _cardCamera?.state ?? CameraPlayState.idle;
     final fleetErrors = ref.watch(fleetProvider).cameraErrors;
     final hasCameraError = cardCameraState == CameraPlayState.busy || fleetErrors.containsKey(p.name);
@@ -307,14 +323,14 @@ class _FleetPrinterCardState extends ConsumerState<FleetPrinterCard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (p.jobName != null && p.jobName!.isNotEmpty) ...[
+                  if (hasJob) ...[
                     Row(
                       children: [
                         const Icon(LucideIcons.fileCode, size: 14, color: AppColors.accentGreen),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            p.jobName!,
+                            displayJobName,
                             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -322,8 +338,8 @@ class _FleetPrinterCardState extends ConsumerState<FleetPrinterCard> {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          '${p.progress.toStringAsFixed(0)}%',
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.accentGreen),
+                          '${displayProgress.toStringAsFixed(0)}%',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: barColor),
                         ),
                       ],
                     ),
@@ -331,12 +347,10 @@ class _FleetPrinterCardState extends ConsumerState<FleetPrinterCard> {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(4),
                       child: LinearProgressIndicator(
-                        value: (p.progress / 100.0).clamp(0.0, 1.0),
+                        value: (displayProgress / 100.0).clamp(0.0, 1.0),
                         minHeight: 6,
                         backgroundColor: AppColors.border,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          isCompleted ? AppColors.info : AppColors.accentGreen,
-                        ),
+                        valueColor: AlwaysStoppedAnimation<Color>(barColor),
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -345,12 +359,20 @@ class _FleetPrinterCardState extends ConsumerState<FleetPrinterCard> {
                       children: [
                         Text(
                           (p.totalLayers > 0 && p.currentLayer > 0)
-                              ? 'Layer ${p.currentLayer} of ${p.totalLayers} (${((p.currentLayer / p.totalLayers) * 100).round()}%)'
+                              ? 'Layer ${p.currentLayer} of ${p.totalLayers} (${((p.currentLayer / p.totalLayers) * 100).round().clamp(0, 100)}%)'
                               : 'Layer ${p.currentLayer} of ${p.totalLayers}',
                           style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
                         ),
                         Text(
-                          isPrinting ? 'Printing' : (isCompleted ? 'Finished' : 'Paused'),
+                          isCompleted
+                              ? 'Finished'
+                              : (p.timeRemaining != null && p.timeRemaining! > 0)
+                                  ? formatRemainingMinutes(p.timeRemaining!)
+                                  : isPrinting
+                                      ? 'Printing'
+                                      : isPaused
+                                          ? 'Paused'
+                                          : p.statusText,
                           style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
                         ),
                       ],

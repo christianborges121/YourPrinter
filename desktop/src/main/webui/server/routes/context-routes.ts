@@ -22,15 +22,40 @@ export function registerContextRoutes(router: Router, deps: RouteDependencies): 
     try {
       const allContexts = deps.contextManager.getAllContexts();
       const activeContextId = deps.contextManager.getActiveContextId();
+      const savedPrinters = getPrinterDetailsManager().getAllSavedPrinters();
 
-      const contexts = allContexts.map((context) => ({
+      const contexts: Array<Record<string, unknown>> = allContexts.map((context) => ({
         id: context.id,
         name: context.printerDetails.Name,
         model: context.printerDetails.printerModel || 'Unknown',
         ipAddress: context.printerDetails.IPAddress,
         serialNumber: context.printerDetails.SerialNumber,
         isActive: context.id === activeContextId,
+        isConnected: context.connectionState === 'connected',
       }));
+
+      // Include saved printers that are currently offline / have no active runtime context
+      // so turning off a printer never removes it from the UI list.
+      for (const saved of savedPrinters) {
+        const hasContext = allContexts.some(
+          (c) =>
+            (saved.SerialNumber && c.printerDetails.SerialNumber === saved.SerialNumber) ||
+            (c.printerDetails.Name && c.printerDetails.Name.trim().toLowerCase() === saved.Name.trim().toLowerCase()) ||
+            (c.name && c.name.trim().toLowerCase() === saved.Name.trim().toLowerCase())
+        );
+        if (!hasContext) {
+          contexts.push({
+            id: saved.SerialNumber || saved.Name,
+            name: saved.Name,
+            model: saved.printerModel || 'Unknown',
+            ipAddress: saved.IPAddress,
+            serialNumber: saved.SerialNumber,
+            isActive: false,
+            isConnected: false,
+            isSavedOffline: true,
+          });
+        }
+      }
 
       return res.json({
         success: true,
@@ -49,7 +74,7 @@ export function registerContextRoutes(router: Router, deps: RouteDependencies): 
 
   /**
    * POST /api/contexts/switch
-   * Switch the active printer context
+   * Switch the active printer context (or connect to a saved offline printer if needed)
    */
   router.post('/contexts/switch', async (req: AuthenticatedRequest, res: Response) => {
     try {
@@ -63,17 +88,58 @@ export function registerContextRoutes(router: Router, deps: RouteDependencies): 
       }
 
       const context = deps.contextManager.getContext(contextId);
-      if (!context) {
-        return res.status(404).json({
-          success: false,
-          error: `Context ${contextId} not found`,
+      if (context) {
+        deps.contextManager.switchContext(contextId);
+        return res.json({
+          success: true,
+          message: `Switched to printer: ${context.printerDetails.Name}`,
         });
       }
 
-      deps.contextManager.switchContext(contextId);
-      return res.json({
-        success: true,
-        message: `Switched to printer: ${context.printerDetails.Name}`,
+      // If no active runtime context exists, check if contextId refers to a saved offline printer
+      const detailsManager = getPrinterDetailsManager();
+      const saved = detailsManager.getAllSavedPrinters().find(
+        (p) => p.SerialNumber === contextId || p.Name.trim().toLowerCase() === contextId.trim().toLowerCase()
+      );
+      if (saved) {
+        if (saved.disabled) {
+          return res.status(400).json({
+            success: false,
+            error: `Printer "${saved.Name}" is disabled. Enable it in Settings first.`,
+          });
+        }
+
+        const isBambu = /bambu|a1\s*mini/i.test(saved.printerModel || '');
+        const connectResult = isBambu
+          ? await deps.connectionManager.connectWithSavedDetails(saved)
+          : await deps.connectionManager.connectDirectlyToIP(saved.IPAddress);
+
+        if (!connectResult.success) {
+          return res.status(400).json({
+            success: false,
+            error: connectResult.error || `Printer "${saved.Name}" is currently offline`,
+          });
+        }
+
+        const updatedContexts = deps.contextManager.getAllContexts();
+        const newCtx = updatedContexts.find(
+          (c) =>
+            (saved.SerialNumber && c.printerDetails.SerialNumber === saved.SerialNumber) ||
+            (c.printerDetails.Name && c.printerDetails.Name.trim().toLowerCase() === saved.Name.trim().toLowerCase())
+        );
+        if (newCtx) {
+          deps.contextManager.switchContext(newCtx.id);
+        }
+
+        return res.json({
+          success: true,
+          message: `Connected and switched to printer: ${saved.Name}`,
+        });
+      }
+
+      return res.status(404).json({
+        success: false,
+        error: `Context ${contextId} not found`,
       });
     } catch (error) {
       const appError = toAppError(error);
@@ -118,7 +184,7 @@ export function registerContextRoutes(router: Router, deps: RouteDependencies): 
           : typeof (pStatus as any)?.progress === 'number'
           ? (pStatus as any).progress
           : null;
-        const printProgress = rawProg !== null && rawProg > 0 && rawProg <= 1.0 ? rawProg * 100 : rawProg;
+        const printProgress = rawProg !== null && rawProg > 0 && rawProg < 1.0 ? rawProg * 100 : rawProg;
         const jobName = pStatus?.currentJob?.fileName || (pStatus as any)?.jobName || null;
 
         printersMap.set(name, {
@@ -239,7 +305,7 @@ export function registerContextRoutes(router: Router, deps: RouteDependencies): 
           : (rawStatus?.extruders ? rawStatus.extruders.map((e: any) => e.temperature?.target ?? 0) : undefined);
 
         const rawOverviewProg = rawStatus?.currentJob?.progress?.percentage ?? rawAny?.progress ?? 0;
-        const normOverviewProg = rawOverviewProg > 0 && rawOverviewProg <= 1.0 ? rawOverviewProg * 100 : rawOverviewProg;
+        const normOverviewProg = rawOverviewProg > 0 && rawOverviewProg < 1.0 ? rawOverviewProg * 100 : rawOverviewProg;
         const { errorCode, errorMessage } = extractErrorInfoFromRecords(rawStatus, rawBackend);
         const statusSummary = rawStatus
           ? {

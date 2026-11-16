@@ -42,6 +42,12 @@ export const SettingsScreen: React.FC = () => {
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState<string>('');
   const [discordIncludeSnapshots, setDiscordIncludeSnapshots] = useState<boolean>(true);
   const [discordIntervalMinutes, setDiscordIntervalMinutes] = useState<number>(5);
+  const [discordNotifyOnStart, setDiscordNotifyOnStart] = useState<boolean>(true);
+  const [discordNotifyOnPause, setDiscordNotifyOnPause] = useState<boolean>(true);
+  const [discordNotifyOnStop, setDiscordNotifyOnStop] = useState<boolean>(true);
+  const [discordNotifyOnError, setDiscordNotifyOnError] = useState<boolean>(true);
+  const [discordProgressIntervalPercent, setDiscordProgressIntervalPercent] = useState<number>(0);
+  const [discordProgressCustomMode, setDiscordProgressCustomMode] = useState<boolean>(false);
   const [testingDiscord, setTestingDiscord] = useState<boolean>(false);
   const [discordTestResult, setDiscordTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
@@ -71,7 +77,14 @@ export const SettingsScreen: React.FC = () => {
           setDiscordEnabled(Boolean(res.enabled));
           setDiscordWebhookUrl(res.webhookUrl || '');
           setDiscordIncludeSnapshots(res.includeCameraSnapshots ?? true);
-          setDiscordIntervalMinutes(res.updateIntervalMinutes || 5);
+          setDiscordIntervalMinutes(res.updateIntervalMinutes ?? 5);
+          setDiscordNotifyOnStart(res.notifyOnStart ?? true);
+          setDiscordNotifyOnPause(res.notifyOnPause ?? true);
+          setDiscordNotifyOnStop(res.notifyOnStop ?? true);
+          setDiscordNotifyOnError(res.notifyOnError ?? true);
+          const progPct = res.progressIntervalPercent ?? 0;
+          setDiscordProgressIntervalPercent(progPct);
+          setDiscordProgressCustomMode(progPct > 0 && ![10, 20, 25, 50].includes(progPct));
         }
       })
       .catch(() => {
@@ -131,6 +144,11 @@ export const SettingsScreen: React.FC = () => {
         webhookUrl: discordWebhookUrl,
         includeCameraSnapshots: discordIncludeSnapshots,
         updateIntervalMinutes: Number(discordIntervalMinutes),
+        notifyOnStart: discordNotifyOnStart,
+        notifyOnPause: discordNotifyOnPause,
+        notifyOnStop: discordNotifyOnStop,
+        notifyOnError: discordNotifyOnError,
+        progressIntervalPercent: Math.max(0, Math.min(99, Math.floor(Number(discordProgressIntervalPercent) || 0))),
       });
     } catch {
       // ignore
@@ -287,7 +305,7 @@ export const SettingsScreen: React.FC = () => {
                         )}
                       </div>
                       <span className="text-[11px] text-[#94A3B8] truncate">
-                        {ctx.model || 'Flashforge 3D Printer'} • {ctx.printerDetails?.ipAddress || 'IP unassigned'}
+                        {ctx.model || 'Flashforge 3D Printer'} • {(ctx as { ipAddress?: string }).ipAddress || ctx.printerDetails?.ipAddress || 'IP unassigned'}
                       </span>
                     </div>
                   </div>
@@ -414,19 +432,111 @@ export const SettingsScreen: React.FC = () => {
         <div className="flex items-center justify-between pt-1">
           <div className="flex flex-col">
             <span className="text-xs font-semibold text-[#F3F4F6]">Periodic Status Interval</span>
-            <span className="text-[11px] text-[#94A3B8]">Send progress updates every N minutes during printing</span>
+            <span className="text-[11px] text-[#94A3B8]">
+              Send time-based progress updates every N minutes, or disable to only notify on events
+            </span>
           </div>
           <select
             value={discordIntervalMinutes}
             onChange={(e) => setDiscordIntervalMinutes(Number(e.target.value))}
             className="bg-[#262626] border border-[#2E2E2E] text-xs text-[#F3F4F6] rounded-lg px-3 py-1.5 outline-none"
           >
+            <option value={0}>Disabled (Events Only)</option>
             <option value={1}>1 Minute</option>
             <option value={5}>5 Minutes</option>
             <option value={10}>10 Minutes</option>
             <option value={15}>15 Minutes</option>
             <option value={30}>30 Minutes</option>
           </select>
+        </div>
+
+        {/* Event Triggers */}
+        <div className="flex flex-col gap-2 pt-2 border-t border-[#2E2E2E]/60">
+          <div className="flex flex-col">
+            <span className="text-xs font-semibold text-[#F3F4F6]">Print Event Notifications</span>
+            <span className="text-[11px] text-[#94A3B8]">
+              Choose which printer lifecycle events trigger immediate Discord alerts
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {[
+              { label: 'Starting', checked: discordNotifyOnStart, setter: setDiscordNotifyOnStart },
+              { label: 'Pausing', checked: discordNotifyOnPause, setter: setDiscordNotifyOnPause },
+              { label: 'Stopping', checked: discordNotifyOnStop, setter: setDiscordNotifyOnStop },
+              { label: 'Error', checked: discordNotifyOnError, setter: setDiscordNotifyOnError },
+            ].map((ev) => (
+              <button
+                key={ev.label}
+                type="button"
+                onClick={() => ev.setter(!ev.checked)}
+                className={`flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-semibold transition-colors cursor-pointer ${
+                  ev.checked
+                    ? 'bg-[#5865F2]/15 border-[#5865F2]/50 text-[#F3F4F6]'
+                    : 'bg-[#262626] border-[#2E2E2E] text-[#94A3B8]'
+                }`}
+              >
+                <span>{ev.label}</span>
+                <span
+                  className={`w-3.5 h-3.5 rounded flex items-center justify-center border ${
+                    ev.checked ? 'bg-[#5865F2] border-[#5865F2] text-white' : 'border-[#4B5563]'
+                  }`}
+                >
+                  {ev.checked && <Check size={10} />}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Progress Milestone Interval */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+          <div className="flex flex-col">
+            <span className="text-xs font-semibold text-[#F3F4F6]">Progress Percentage Updates</span>
+            <span className="text-[11px] text-[#94A3B8]">
+              Notify at percentage milestones (e.g., 25% sends at 25%, 50%, 75%)
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <select
+              value={discordProgressCustomMode ? 'custom' : String(discordProgressIntervalPercent)}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === 'custom') {
+                  setDiscordProgressCustomMode(true);
+                  if (discordProgressIntervalPercent <= 0) {
+                    setDiscordProgressIntervalPercent(25);
+                  }
+                } else {
+                  setDiscordProgressCustomMode(false);
+                  setDiscordProgressIntervalPercent(Number(v));
+                }
+              }}
+              className="bg-[#262626] border border-[#2E2E2E] text-xs text-[#F3F4F6] rounded-lg px-3 py-1.5 outline-none"
+            >
+              <option value="0">Disabled</option>
+              <option value="10">Every 10%</option>
+              <option value="20">Every 20%</option>
+              <option value="25">Every 25% (25, 50, 75%)</option>
+              <option value="50">Every 50% (50%)</option>
+              <option value="custom">Custom %...</option>
+            </select>
+            {discordProgressCustomMode && (
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  min={1}
+                  max={99}
+                  value={discordProgressIntervalPercent || ''}
+                  onChange={(e) => {
+                    const num = Math.max(1, Math.min(99, Number(e.target.value) || 1));
+                    setDiscordProgressIntervalPercent(num);
+                  }}
+                  className="w-16 bg-[#262626] border border-[#2E2E2E] focus:border-[#5865F2] rounded-lg px-2.5 py-1.5 text-xs font-mono text-[#F3F4F6] outline-none"
+                />
+                <span className="text-xs text-[#94A3B8]">%</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Test Webhook Button & Feedback */}
@@ -522,7 +632,7 @@ export const SettingsScreen: React.FC = () => {
               onClick={() => setUrl('http://localhost:3080')}
               className="text-[11px] font-mono px-2 py-1 rounded bg-[#262626] hover:bg-[#383838] border border-[#2E2E2E] text-[#D1D5DB]"
             >
-              Port 3080 (Modern WebUI)
+              Port 3080 (WebUI)
             </button>
             <button
               type="button"

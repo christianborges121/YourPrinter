@@ -407,6 +407,11 @@ class ApiClient {
     webhookUrl?: string;
     includeCameraSnapshots?: boolean;
     updateIntervalMinutes?: number;
+    notifyOnStart?: boolean;
+    notifyOnPause?: boolean;
+    notifyOnStop?: boolean;
+    notifyOnError?: boolean;
+    progressIntervalPercent?: number;
   }): Promise<{ success: boolean; message?: string }> {
     return this.request('/api/notifications/discord', {
       method: 'POST',

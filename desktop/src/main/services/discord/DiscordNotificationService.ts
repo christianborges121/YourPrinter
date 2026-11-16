@@ -54,7 +54,7 @@ import type { TemperatureMonitoringService } from '../TemperatureMonitoringServi
  * Printer state for Discord notifications
  * Simplified from PrinterState enum for Discord logic
  */
-type DiscordPrinterState = 'idle' | 'printing' | 'paused' | 'unknown';
+type DiscordPrinterState = 'idle' | 'printing' | 'paused' | 'error' | 'preparing' | 'unknown';
 
 interface DiscordWebhookRequest {
   readonly payload: DiscordWebhookPayload;
@@ -73,6 +73,7 @@ export class DiscordNotificationService extends EventEmitter {
 
   // Per-context state tracking
   private readonly lastPrinterState = new Map<string, DiscordPrinterState>();
+  private readonly lastProgressMilestone = new Map<string, number>();
   private readonly cachedStatuses = new Map<string, PrinterStatus>();
   private readonly monitorListeners = new Map<
     string,
@@ -163,6 +164,7 @@ export class DiscordNotificationService extends EventEmitter {
 
     this.detachContextMonitors(contextId);
     this.lastPrinterState.delete(contextId);
+    this.lastProgressMilestone.delete(contextId);
     this.cachedStatuses.delete(contextId);
     this.reconcilePeriodicTimer();
   }
@@ -213,6 +215,7 @@ export class DiscordNotificationService extends EventEmitter {
       this.detachContextMonitors(contextId);
     }
     this.lastPrinterState.clear();
+    this.lastProgressMilestone.clear();
     this.cachedStatuses.clear();
     this.shouldRunPeriodicUpdateAgain = false;
     this.isPeriodicUpdateInProgress = false;
@@ -237,10 +240,15 @@ export class DiscordNotificationService extends EventEmitter {
     const config = this.configManager.getConfig();
 
     return {
-      enabled: config.DiscordSync,
-      includeCameraSnapshots: config.DiscordIncludeCameraSnapshots,
-      webhookUrl: config.WebhookUrl,
-      updateIntervalMinutes: config.DiscordUpdateIntervalMinutes,
+      enabled: Boolean(config.DiscordSync),
+      includeCameraSnapshots: Boolean(config.DiscordIncludeCameraSnapshots),
+      webhookUrl: config.WebhookUrl || '',
+      updateIntervalMinutes: config.DiscordUpdateIntervalMinutes ?? 5,
+      notifyOnStart: config.DiscordNotifyOnStart ?? true,
+      notifyOnPause: config.DiscordNotifyOnPause ?? true,
+      notifyOnStop: config.DiscordNotifyOnStop ?? true,
+      notifyOnError: config.DiscordNotifyOnError ?? true,
+      progressIntervalPercent: config.DiscordProgressIntervalPercent ?? 0,
     };
   }
 
@@ -251,23 +259,33 @@ export class DiscordNotificationService extends EventEmitter {
   private handleConfigUpdate(): void {
     const newConfig = this.extractDiscordConfig();
 
-    // Check if Discord-specific settings changed
-    const configChanged =
+    const timerConfigChanged =
       this.currentConfig.enabled !== newConfig.enabled ||
       this.currentConfig.includeCameraSnapshots !== newConfig.includeCameraSnapshots ||
       this.currentConfig.webhookUrl !== newConfig.webhookUrl ||
       this.currentConfig.updateIntervalMinutes !== newConfig.updateIntervalMinutes;
 
-    if (!configChanged) {
+    const eventConfigChanged =
+      this.currentConfig.notifyOnStart !== newConfig.notifyOnStart ||
+      this.currentConfig.notifyOnPause !== newConfig.notifyOnPause ||
+      this.currentConfig.notifyOnStop !== newConfig.notifyOnStop ||
+      this.currentConfig.notifyOnError !== newConfig.notifyOnError ||
+      this.currentConfig.progressIntervalPercent !== newConfig.progressIntervalPercent;
+
+    if (!timerConfigChanged && !eventConfigChanged) {
       return;
     }
 
-    console.log('[DiscordNotificationService] Config changed, restarting timers');
+    if (this.currentConfig.progressIntervalPercent !== newConfig.progressIntervalPercent) {
+      this.lastProgressMilestone.clear();
+    }
+
+    console.log('[DiscordNotificationService] Config changed, reconciling timers');
 
     // Update config
     this.currentConfig = newConfig;
 
-    this.reconcilePeriodicTimer({ sendImmediateUpdate: true });
+    this.reconcilePeriodicTimer({ sendImmediateUpdate: timerConfigChanged });
   }
 
   // ============================================================================
@@ -301,7 +319,12 @@ export class DiscordNotificationService extends EventEmitter {
    * Determine whether the periodic timer should be running
    */
   private shouldRunPeriodicTimer(): boolean {
-    return this.currentConfig.enabled && Boolean(this.currentConfig.webhookUrl) && this.lastPrinterState.size > 0;
+    return (
+      this.currentConfig.enabled &&
+      Boolean(this.currentConfig.webhookUrl) &&
+      this.currentConfig.updateIntervalMinutes > 0 &&
+      this.lastPrinterState.size > 0
+    );
   }
 
   /**
@@ -423,20 +446,80 @@ export class DiscordNotificationService extends EventEmitter {
   }
 
   /**
-   * Check for state transitions and send event-driven notifications
+   * Check for state transitions and progress milestones to send event-driven notifications
    */
   private checkStateTransition(contextId: string, status: PrinterStatus): void {
     const currentState = this.mapPrinterState(status.state);
     const previousState = this.lastPrinterState.get(contextId) ?? 'unknown';
 
-    // Detect transition to idle
-    if (previousState !== 'idle' && currentState === 'idle' && previousState !== 'unknown') {
-      console.log(`[DiscordNotificationService] Detected idle transition for context ${contextId}`);
-      void this.sendIdleNotification(contextId, status);
+    // Update state tracking first so async handlers see the latest state
+    this.lastPrinterState.set(contextId, currentState);
+
+    // 1. Print Started (from idle/preparing/error into printing, not from paused)
+    if (
+      previousState !== 'unknown' &&
+      previousState !== 'printing' &&
+      previousState !== 'paused' &&
+      currentState === 'printing'
+    ) {
+      this.lastProgressMilestone.set(contextId, 0);
+      if (this.currentConfig.notifyOnStart) {
+        console.log(`[DiscordNotificationService] Detected print start for context ${contextId}`);
+        void this.sendEventStatusNotification(contextId, status, '🚀 Print Started', 'print-started');
+      }
     }
 
-    // Update state tracking
-    this.lastPrinterState.set(contextId, currentState);
+    // 2. Print Paused
+    if (previousState !== 'unknown' && previousState !== 'paused' && currentState === 'paused') {
+      if (this.currentConfig.notifyOnPause) {
+        console.log(`[DiscordNotificationService] Detected print pause for context ${contextId}`);
+        void this.sendEventStatusNotification(contextId, status, '⏸️ Print Paused', 'print-paused');
+      }
+    }
+
+    // 3. Printer Error
+    if (previousState !== 'unknown' && previousState !== 'error' && currentState === 'error') {
+      if (this.currentConfig.notifyOnError) {
+        console.log(`[DiscordNotificationService] Detected error state for context ${contextId}`);
+        void this.sendEventStatusNotification(contextId, status, '❌ Printer Error', 'printer-error');
+      }
+    }
+
+    // 4. Print Stopped / Returned to Idle
+    if (previousState !== 'unknown' && previousState !== 'idle' && currentState === 'idle') {
+      this.lastProgressMilestone.delete(contextId);
+      if (this.currentConfig.notifyOnStop) {
+        console.log(`[DiscordNotificationService] Detected idle transition for context ${contextId}`);
+        void this.sendIdleNotification(contextId, status);
+      }
+    }
+
+    // 5. Percentage-based progress milestones (e.g., 25%, 50%, 75%)
+    const interval = this.currentConfig.progressIntervalPercent;
+    if (currentState === 'printing' && interval > 0 && status.currentJob?.progress) {
+      const rawPct = status.currentJob.progress.percentage;
+      if (typeof rawPct === 'number' && Number.isFinite(rawPct)) {
+        const pct = Math.max(0, Math.min(100, Math.floor(rawPct)));
+        const bucket = Math.floor(pct / interval) * interval;
+
+        if (previousState === 'unknown') {
+          // Seed initial milestone on startup mid-print to avoid duplicate alerts
+          this.lastProgressMilestone.set(contextId, bucket);
+        } else {
+          const prevBucket = this.lastProgressMilestone.get(contextId) ?? 0;
+          if (bucket > prevBucket && bucket > 0 && bucket < 100) {
+            this.lastProgressMilestone.set(contextId, bucket);
+            console.log(`[DiscordNotificationService] Reached ${bucket}% progress milestone for context ${contextId}`);
+            void this.sendEventStatusNotification(
+              contextId,
+              status,
+              `📊 Print Progress: ${bucket}%`,
+              'progress-milestone'
+            );
+          }
+        }
+      }
+    }
   }
 
   /**
@@ -445,11 +528,20 @@ export class DiscordNotificationService extends EventEmitter {
   private mapPrinterState(state: PrinterState): DiscordPrinterState {
     switch (state) {
       case 'Ready':
+      case 'Completed':
+      case 'Cancelled':
         return 'idle';
       case 'Printing':
         return 'printing';
       case 'Paused':
+      case 'Pausing':
         return 'paused';
+      case 'Error':
+        return 'error';
+      case 'Heating':
+      case 'Calibrating':
+      case 'Busy':
+        return 'preparing';
       default:
         return 'unknown';
     }
@@ -549,6 +641,45 @@ export class DiscordNotificationService extends EventEmitter {
     }
   }
 
+  /**
+   * Send event-driven status notification with custom title prefix
+   */
+  private async sendEventStatusNotification(
+    contextId: string,
+    status: PrinterStatus,
+    titlePrefix: string,
+    eventType: string
+  ): Promise<void> {
+    if (!this.currentConfig.enabled || !this.currentConfig.webhookUrl) {
+      return;
+    }
+
+    try {
+      const context = this.contextManager.getContext(contextId);
+      if (!context) {
+        return;
+      }
+
+      const baseEmbed = this.createStatusEmbed(status, context);
+      const embed: DiscordEmbed = {
+        ...baseEmbed,
+        title: `${titlePrefix} — ${context.name || 'FlashForge Printer'}`,
+      };
+      const payload: DiscordWebhookPayload = {
+        embeds: [embed],
+      };
+
+      await this.sendWebhook({ payload, contextId });
+
+      console.log(`[DiscordNotificationService] Sent ${eventType} notification for ${contextId}`);
+      this.emit('notification-sent', { contextId, type: eventType });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`[DiscordNotificationService] Failed to send ${eventType} notification: ${errorMessage}`);
+      this.emit('notification-failed', { contextId, error: errorMessage });
+    }
+  }
+
   // ============================================================================
   // EVENT-DRIVEN NOTIFICATIONS
   // ============================================================================
@@ -558,7 +689,7 @@ export class DiscordNotificationService extends EventEmitter {
    * Called by external systems on print completion
    */
   public async notifyPrintComplete(contextId: string, fileName: string, durationSeconds?: number): Promise<void> {
-    if (!this.currentConfig.enabled || !this.currentConfig.webhookUrl) {
+    if (!this.currentConfig.enabled || !this.currentConfig.webhookUrl || !this.currentConfig.notifyOnStop) {
       return;
     }
 
@@ -737,6 +868,8 @@ export class DiscordNotificationService extends EventEmitter {
         return 0x3498db; // Blue for ready
       case 'Paused':
         return 0xf39c12; // Orange for paused
+      case 'Error':
+        return 0xe74c3c; // Red for error
       default:
         return 0x95a5a6; // Gray for other states
     }

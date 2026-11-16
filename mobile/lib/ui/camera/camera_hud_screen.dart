@@ -8,6 +8,7 @@ import '../../core/constants/app_colors.dart';
 import '../../services/camera_stream_service.dart';
 import '../../state/camera_provider.dart';
 import '../../state/telemetry_provider.dart';
+import '../../utils/progress_utils.dart';
 
 class CameraHudScreen extends ConsumerStatefulWidget {
   const CameraHudScreen({super.key});
@@ -156,7 +157,7 @@ class _CameraHudScreenState extends ConsumerState<CameraHudScreen> {
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        Text('${status.progress.toStringAsFixed(1)}%',
+                        Text('${normalizeProgressPercent(status.progress, isCompleted: status.isCompleted).toStringAsFixed(1)}%',
                             style: const TextStyle(color: AppColors.accentGreen, fontWeight: FontWeight.bold, fontSize: 12)),
                         const SizedBox(width: 8),
                         Text('Layer ${status.currentLayer}/${status.totalLayers}',

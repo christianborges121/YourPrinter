@@ -656,8 +656,8 @@ export abstract class DualAPIBackend extends BasePrinterBackend {
           (raw.progress as number) ??
           0;
 
-        // Convert decimal format (0.0 - 1.0) from modern Flashforge backends to percentage (0 - 100)
-        if (rawProg > 0 && rawProg <= 1.0) {
+        // Convert decimal format (0.0 - 1.0 exclusive) from modern Flashforge backends to percentage (0 - 100)
+        if (rawProg > 0 && rawProg < 1.0) {
           rawProg = rawProg * 100;
         }
 

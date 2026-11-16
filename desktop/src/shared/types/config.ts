@@ -89,6 +89,11 @@ export interface AppConfig {
   readonly CustomCameraUrl: string;
   readonly CustomLeds: boolean;
   readonly DiscordUpdateIntervalMinutes: number;
+  readonly DiscordNotifyOnStart: boolean;
+  readonly DiscordNotifyOnPause: boolean;
+  readonly DiscordNotifyOnStop: boolean;
+  readonly DiscordNotifyOnError: boolean;
+  readonly DiscordProgressIntervalPercent: number;
   readonly WebUIEnabled: boolean;
   readonly WebUIPort: number;
   readonly WebUIPassword: string;
@@ -132,6 +137,11 @@ export interface MutableAppConfig {
   CustomCameraUrl: string;
   CustomLeds: boolean;
   DiscordUpdateIntervalMinutes: number;
+  DiscordNotifyOnStart: boolean;
+  DiscordNotifyOnPause: boolean;
+  DiscordNotifyOnStop: boolean;
+  DiscordNotifyOnError: boolean;
+  DiscordProgressIntervalPercent: number;
   WebUIEnabled: boolean;
   WebUIPort: number;
   WebUIPassword: string;
@@ -280,6 +290,11 @@ export const DEFAULT_CONFIG: AppConfig = {
   CustomCameraUrl: '',
   CustomLeds: false,
   DiscordUpdateIntervalMinutes: 5,
+  DiscordNotifyOnStart: true,
+  DiscordNotifyOnPause: true,
+  DiscordNotifyOnStop: true,
+  DiscordNotifyOnError: true,
+  DiscordProgressIntervalPercent: 0,
   WebUIEnabled: false,
   WebUIPort: 3000,
   WebUIPassword: '',

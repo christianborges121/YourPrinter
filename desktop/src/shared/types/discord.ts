@@ -73,6 +73,16 @@ export interface DiscordServiceConfig {
   readonly includeCameraSnapshots: boolean;
   /** Discord webhook URL */
   readonly webhookUrl: string;
-  /** Update interval in minutes */
+  /** Update interval in minutes (0 = disabled) */
   readonly updateIntervalMinutes: number;
+  /** Notify when a print starts */
+  readonly notifyOnStart: boolean;
+  /** Notify when a print pauses */
+  readonly notifyOnPause: boolean;
+  /** Notify when a print stops / completes / cancels */
+  readonly notifyOnStop: boolean;
+  /** Notify when a printer enters an error state */
+  readonly notifyOnError: boolean;
+  /** Progress milestone interval in percent (0 = disabled, e.g. 25 -> 25%, 50%, 75%) */
+  readonly progressIntervalPercent: number;
 }

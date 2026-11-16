@@ -1,3 +1,5 @@
+import '../utils/progress_utils.dart';
+
 class PrinterDetails {
   final String ipAddress;
   final String? serialNumber;
@@ -97,6 +99,9 @@ class FleetOverviewPrinter {
 
   factory FleetOverviewPrinter.fromJson(Map<String, dynamic> json) {
     final status = json['status'] as Map<String, dynamic>? ?? {};
+    final statusText = status['printerState'] as String? ?? 'Idle';
+    final isCompleteState =
+        statusText.toLowerCase().contains('complete') || statusText.toLowerCase().contains('finish');
     return FleetOverviewPrinter(
       name: json['name'] as String? ?? 'Printer',
       model: json['model'] as String? ?? 'YourPrinter',
@@ -104,7 +109,7 @@ class FleetOverviewPrinter {
       isConnected: json['isConnected'] as bool? ?? false,
       hasCamera: json['hasCamera'] as bool? ?? false,
       jobName: status['jobName'] as String?,
-      progress: (status['progress'] as num?)?.toDouble() ?? 0.0,
+      progress: normalizeProgressPercent((status['progress'] as num?)?.toDouble(), isCompleted: isCompleteState),
       currentLayer: (status['currentLayer'] as num?)?.toInt() ?? 0,
       totalLayers: (status['totalLayers'] as num?)?.toInt() ?? 0,
       timeRemaining: (status['timeRemaining'] as num?)?.toInt(),

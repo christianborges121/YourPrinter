@@ -18,6 +18,11 @@ type MockDiscordConfig = {
   DiscordIncludeCameraSnapshots: boolean;
   WebhookUrl: string;
   DiscordUpdateIntervalMinutes: number;
+  DiscordNotifyOnStart?: boolean;
+  DiscordNotifyOnPause?: boolean;
+  DiscordNotifyOnStop?: boolean;
+  DiscordNotifyOnError?: boolean;
+  DiscordProgressIntervalPercent?: number;
 };
 
 class MockConfigManager extends EventEmitter {
@@ -305,6 +310,132 @@ describe('DiscordNotificationService', () => {
 
     expect(stateMonitor.listenerCount('print-completed')).toBe(0);
     expect(temperatureMonitor.listenerCount('printer-cooled')).toBe(0);
+
+    service.dispose();
+  });
+
+  it('disables the periodic timer when DiscordUpdateIntervalMinutes is 0', async () => {
+    const contextManager = new MockContextManager([createContext('ctx-1')]);
+    const service = new DiscordNotificationService(
+      new MockConfigManager({ DiscordUpdateIntervalMinutes: 0 }) as any,
+      contextManager as any
+    );
+
+    service.initialize();
+    service.registerContext('ctx-1');
+    service.updatePrinterStatus('ctx-1', {
+      state: 'Printing',
+      temperatures: { extruder: { current: 210, target: 210 }, bed: { current: 60, target: 60 } },
+    } as PrinterStatus);
+
+    expect(jest.getTimerCount()).toBe(0);
+
+    await jest.advanceTimersByTimeAsync(10 * 60 * 1000);
+    expect(global.fetch).not.toHaveBeenCalled();
+
+    service.dispose();
+  });
+
+  it('sends event notifications for start, pause, error, stop, and percentage milestones when enabled', async () => {
+    const contextManager = new MockContextManager([createContext('ctx-1')]);
+    const service = new DiscordNotificationService(
+      new MockConfigManager({
+        DiscordUpdateIntervalMinutes: 0,
+        DiscordNotifyOnStart: true,
+        DiscordNotifyOnPause: true,
+        DiscordNotifyOnStop: true,
+        DiscordNotifyOnError: true,
+        DiscordProgressIntervalPercent: 25,
+      }) as any,
+      contextManager as any
+    );
+
+    service.initialize();
+    service.registerContext('ctx-1');
+
+    const baseStatus = (state: PrinterStatus['state'], percentage = 0): PrinterStatus =>
+      ({
+        state,
+        temperatures: { extruder: { current: 210, target: 210 }, bed: { current: 60, target: 60 } },
+        currentJob: {
+          fileName: 'benchy.gcode',
+          progress: { percentage },
+        },
+      }) as PrinterStatus;
+
+    // Initial idle poll (unknown -> idle, no notification)
+    service.updatePrinterStatus('ctx-1', baseStatus('Ready', 0));
+    await Promise.resolve();
+    expect(global.fetch).toHaveBeenCalledTimes(0);
+
+    // Start printing -> print-started
+    service.updatePrinterStatus('ctx-1', baseStatus('Printing', 5));
+    await Promise.resolve();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    // 25% milestone
+    service.updatePrinterStatus('ctx-1', baseStatus('Printing', 25));
+    await Promise.resolve();
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+
+    // 35% -> same 25% bucket, no duplicate
+    service.updatePrinterStatus('ctx-1', baseStatus('Printing', 35));
+    await Promise.resolve();
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+
+    // 50% and 75% milestones
+    service.updatePrinterStatus('ctx-1', baseStatus('Printing', 50));
+    await Promise.resolve();
+    service.updatePrinterStatus('ctx-1', baseStatus('Printing', 75));
+    await Promise.resolve();
+    expect(global.fetch).toHaveBeenCalledTimes(4);
+
+    // Pause -> print-paused
+    service.updatePrinterStatus('ctx-1', baseStatus('Paused', 75));
+    await Promise.resolve();
+    expect(global.fetch).toHaveBeenCalledTimes(5);
+
+    // Error -> printer-error
+    service.updatePrinterStatus('ctx-1', baseStatus('Error', 75));
+    await Promise.resolve();
+    expect(global.fetch).toHaveBeenCalledTimes(6);
+
+    // Stop / return to idle -> idle-transition
+    service.updatePrinterStatus('ctx-1', baseStatus('Ready', 0));
+    await Promise.resolve();
+    expect(global.fetch).toHaveBeenCalledTimes(7);
+
+    service.dispose();
+  });
+
+  it('suppresses start, pause, stop, and error notifications when toggled off', async () => {
+    const contextManager = new MockContextManager([createContext('ctx-1')]);
+    const service = new DiscordNotificationService(
+      new MockConfigManager({
+        DiscordUpdateIntervalMinutes: 0,
+        DiscordNotifyOnStart: false,
+        DiscordNotifyOnPause: false,
+        DiscordNotifyOnStop: false,
+        DiscordNotifyOnError: false,
+        DiscordProgressIntervalPercent: 0,
+      }) as any,
+      contextManager as any
+    );
+
+    service.initialize();
+    service.registerContext('ctx-1');
+
+    const status = (state: PrinterStatus['state']): PrinterStatus => ({ state }) as PrinterStatus;
+
+    service.updatePrinterStatus('ctx-1', status('Ready'));
+    service.updatePrinterStatus('ctx-1', status('Printing'));
+    service.updatePrinterStatus('ctx-1', status('Paused'));
+    service.updatePrinterStatus('ctx-1', status('Error'));
+    service.updatePrinterStatus('ctx-1', status('Ready'));
+    await service.notifyPrintComplete('ctx-1', 'benchy.gcode', 100);
+    await Promise.resolve();
+
+    expect(global.fetch).not.toHaveBeenCalled();
 
     service.dispose();
   });

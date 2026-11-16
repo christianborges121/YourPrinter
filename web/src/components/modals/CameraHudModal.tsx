@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Minimize2, Thermometer, Layers, ShieldCheck, Video, RefreshCw } from 'lucide-react';
 import { usePrinter } from '../../context/PrinterContext';
 import { api } from '../../services/api';
+import { normalizeProgressPercent } from '../../utils/progress';
 
 interface CameraHudModalProps {
   isOpen: boolean;
@@ -199,10 +200,12 @@ export const CameraHudModal: React.FC<CameraHudModalProps> = ({ isOpen, onClose 
               Progress
             </span>
             <span className="text-xl font-extrabold text-[#00AE42]">
-              {(() => {
-                const p = status?.progress || 0;
-                return Math.round(p > 0 && p <= 1 ? p * 100 : p);
-              })()}%
+              {Math.round(
+                normalizeProgressPercent(
+                  status?.progress,
+                  Boolean(status?.printerState && /complete|finish/i.test(status.printerState))
+                )
+              )}%
             </span>
           </div>
 

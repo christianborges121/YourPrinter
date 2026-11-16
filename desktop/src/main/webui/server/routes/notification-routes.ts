@@ -18,7 +18,12 @@ export function registerNotificationRoutes(router: Router, deps: RouteDependenci
         enabled: Boolean(config.DiscordSync),
         webhookUrl: config.WebhookUrl || '',
         includeCameraSnapshots: Boolean(config.DiscordIncludeCameraSnapshots),
-        updateIntervalMinutes: config.DiscordUpdateIntervalMinutes || 5,
+        updateIntervalMinutes: config.DiscordUpdateIntervalMinutes ?? 5,
+        notifyOnStart: config.DiscordNotifyOnStart ?? true,
+        notifyOnPause: config.DiscordNotifyOnPause ?? true,
+        notifyOnStop: config.DiscordNotifyOnStop ?? true,
+        notifyOnError: config.DiscordNotifyOnError ?? true,
+        progressIntervalPercent: config.DiscordProgressIntervalPercent ?? 0,
       });
     } catch (error) {
       const appError = toAppError(error);
@@ -29,7 +34,17 @@ export function registerNotificationRoutes(router: Router, deps: RouteDependenci
   // Update Discord notification config
   router.post('/notifications/discord', async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const { enabled, webhookUrl, includeCameraSnapshots, updateIntervalMinutes } = req.body || {};
+      const {
+        enabled,
+        webhookUrl,
+        includeCameraSnapshots,
+        updateIntervalMinutes,
+        notifyOnStart,
+        notifyOnPause,
+        notifyOnStop,
+        notifyOnError,
+        progressIntervalPercent,
+      } = req.body || {};
       const updates: Record<string, any> = {};
 
       if (typeof enabled === 'boolean') {
@@ -41,8 +56,28 @@ export function registerNotificationRoutes(router: Router, deps: RouteDependenci
       if (typeof includeCameraSnapshots === 'boolean') {
         updates.DiscordIncludeCameraSnapshots = includeCameraSnapshots;
       }
-      if (typeof updateIntervalMinutes === 'number' && updateIntervalMinutes >= 1) {
-        updates.DiscordUpdateIntervalMinutes = updateIntervalMinutes;
+      if (typeof updateIntervalMinutes === 'number' && Number.isFinite(updateIntervalMinutes) && updateIntervalMinutes >= 0) {
+        updates.DiscordUpdateIntervalMinutes = Math.floor(updateIntervalMinutes);
+      }
+      if (typeof notifyOnStart === 'boolean') {
+        updates.DiscordNotifyOnStart = notifyOnStart;
+      }
+      if (typeof notifyOnPause === 'boolean') {
+        updates.DiscordNotifyOnPause = notifyOnPause;
+      }
+      if (typeof notifyOnStop === 'boolean') {
+        updates.DiscordNotifyOnStop = notifyOnStop;
+      }
+      if (typeof notifyOnError === 'boolean') {
+        updates.DiscordNotifyOnError = notifyOnError;
+      }
+      if (
+        typeof progressIntervalPercent === 'number' &&
+        Number.isFinite(progressIntervalPercent) &&
+        progressIntervalPercent >= 0 &&
+        progressIntervalPercent <= 99
+      ) {
+        updates.DiscordProgressIntervalPercent = Math.floor(progressIntervalPercent);
       }
 
       await deps.configManager.updateConfig(updates);
